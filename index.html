@@ -182,6 +182,8 @@ async function loadBibleDoc(verCode, tabIndex) {
     if (!turnstileToken) {
         console.warn("驗證 Token 尚未產生，正在嘗試背景觸發...");
         // 在隱身模式下，如果沒有 Token，通常需要手動執行一次 execute 觸發
+
+        turnstile.reset('#turnstile-container'); 
         turnstile.execute('#turnstile-container');
         return;
     }
@@ -473,6 +475,7 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
 
 
