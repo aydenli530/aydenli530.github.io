@@ -151,18 +151,7 @@ function startQuery() {
     });
 }
 
-// 3. 處理個別譯本請求
 function loadBibleDoc(verCode, tabIndex) {
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        if (this.status == 200) {
-            // 對接到你的 handleResponse 邏輯，但改為更新 Tab 區塊
-            renderToTab(this.responseText, tabIndex, verCode);
-        }
-		console.log(this.responseText)
-    };
-
-    // 解析彈窗輸入的章節 (例如 1:1)
     const book = document.getElementById("bibleBookList").value;
     const inputVal = document.getElementById("popupInput").value || "1";
     let chap = "1", sec = "";
@@ -171,21 +160,51 @@ function loadBibleDoc(verCode, tabIndex) {
     } else {
         chap = inputVal;
     }
-
     const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
     
-    // 構建你的原始 URL 格式 (確保有 ?)
-    let url = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
+    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
               "&chap=" + chap + 
               "&sec=" + sec + 
               "&version=" + verCode + 
               "&gb=" + gb;
 
-    const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-	
-    xhttp.open("GET", proxyUrl, true);
-    xhttp.send();
+    function fetchBible(url, isProxy = false) {
+        const xhttp = new XMLHttpRequest();
+        xhttp.onload = function() {
+            if (this.status == 200) {
+                let data = this.responseText;
+                if (isProxy) {
+                    try {
+                        // AllOrigins /get 模式會回傳 JSON，內容在 .contents
+                        const json = JSON.parse(this.responseText);
+                        data = json.contents;
+                    } catch (e) {
+                        console.error("解析代理資料失敗", e);
+                    }
+                }
+                renderToTab(data, tabIndex, verCode);
+            } else if (!isProxy) {
+                tryProxy();
+            }
+        };
+
+        xhttp.onerror = function() {
+            if (!isProxy) tryProxy();
+        };
+
+        xhttp.open("GET", url, true);
+        xhttp.send();
+    }
+
+    function tryProxy() {
+        // 使用 /get 而不是 /raw，這對 'null' origin 支援度較好
+        const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(originalUrl);
+        fetchBible(proxyUrl, true);
+    }
+
+    fetchBible(originalUrl, false);
 }
+
 
 function renderToTab(responseText, tabIndex, verCode) {
     let aaobj;
@@ -347,5 +366,6 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
 
