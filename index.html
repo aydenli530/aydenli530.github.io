@@ -260,28 +260,32 @@ window.onload = function() {
         });
     }
 };
-	
+
 async function loadBibleDoc(verCode, tabIndex) {
+    // 1. 取得 DOM 數值
     const book = document.getElementById("bibleBookList").value;
     const inputVal = document.getElementById("popupInput").value || "1";
-    let [chap, sec] = inputVal.includes(':') ? inputVal.split(':') : [inputVal, ""];
     const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
+    let [chap, sec] = inputVal.includes(':') ? inputVal.split(':') : [inputVal, ""];
     
-    // 1. 檢查 Turnstile SDK 是否載入
+    // 2. 嚴格檢查 Turnstile 狀態
     if (typeof turnstile === 'undefined') {
-        alert("安全驗證元件載入中，請稍候再試或重新整理頁面。");
+        console.error("Turnstile SDK 未載入");
+        alert("安全驗證元件尚未準備好，請稍候或重新整理頁面。");
         return;
     }
 
-    // 2. 取得 Token (使用 window.tsWidgetId 確保跨函式存取)
+    // 取得 Token (確保 window.tsWidgetId 已在 window.onload 中初始化)
     const turnstileToken = turnstile.getResponse(window.tsWidgetId);
     
     if (!turnstileToken) {
-        alert("請先完成下方的安全驗證（點擊驗證框）");
+        alert("請先點擊下方的『安全驗證框』進行人工驗證。");
+        // 滾動到驗證框位置提醒使用者
+        document.getElementById("turnstile-container")?.scrollIntoView({ behavior: 'smooth' });
         return;
     }
    
-    // 3. 構造原始 URL 與 Worker Proxy URL
+    // 3. 構造 URL
     let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
               "&chap=" + chap + 
               "&sec=" + sec + 
@@ -290,34 +294,49 @@ async function loadBibleDoc(verCode, tabIndex) {
               
     const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
 
+    // 4. 發送帶有超時控制的請求
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒自動斷開
+
     try {
-        // 4. 發送帶有驗證 Token 的請求
         const response = await fetch(myWorkerUrl, {
             method: "GET",
+            signal: controller.signal,
             headers: {
-                "X-Turnstile-Token": turnstileToken
+                "X-Turnstile-Token": turnstileToken,
+                "X-Requested-With": "XMLHttpRequest" // 增加此 Header 有助於通過某些 WAF 檢查
             }
         });
+
+        clearTimeout(timeoutId);
 
         if (response.ok) {
             const data = await response.text();
             renderToTab(data, tabIndex, verCode);
             
-            // 成功後重置驗證碼，防止 Token 被重複利用
+            // 成功後建議重置驗證碼 (GitHub Pages 靜態環境建議每次成功都重置)
             turnstile.reset(window.tsWidgetId); 
-        } else if (response.status === 403 || response.status === 401) {
-            alert("安全驗證失效或權限不足，請重新驗證。");
-            turnstile.reset(window.tsWidgetId);
         } else {
-            console.error("Worker 請求失敗，狀態碼: " + response.status);
-            alert("伺服器錯誤，請稍後再試。");
+            // 針對 401/403 (驗證失敗) 做處理
+            if (response.status === 403 || response.status === 401) {
+                alert("安全驗證已過期，請重新點擊驗證框。");
+            } else {
+                alert(`伺服器回應錯誤 (${response.status})，請稍後再試。`);
+            }
+            turnstile.reset(window.tsWidgetId);
         }
     } catch (err) {
-        console.error("網路錯誤: " + err.message);
-        alert("無法連線至伺服器，請檢查網路。");
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            alert("請求超時，請檢查您的網路連線或關閉廣告攔截器。");
+        } else {
+            console.error("連線錯誤:", err);
+            alert("無法連接到 API 伺服器，請確認 Worker 運作正常。");
+        }
+        // 發生通訊錯誤時也重置驗證碼以清空狀態
+        if (typeof turnstile !== 'undefined') turnstile.reset(window.tsWidgetId);
     }
 }
-
 
 	
 function renderToTab(responseText, tabIndex, verCode) {
@@ -480,6 +499,7 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
 
 
