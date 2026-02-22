@@ -381,57 +381,100 @@ function renderDevSpecs() {
      
 const searchInput = document.getElementById('searchInput');
 
-// 確保 DOM 完全載入後才執行
+// 確保 DOM 載入後執行
 document.addEventListener('DOMContentLoaded', () => {
-    // 修正 ID：v2 使用的是 'search-input'
-    const searchInput = document.getElementById('search-input');
-    const resultsContainer = document.getElementById('results-container'); 
-    const historyList = document.getElementById('history-list'); // 確保 HTML 有此 ID
+    const searchInput = document.getElementById('bibleSearch');
+    const historyContainer = document.getElementById('historyTags');
 
+    // 1. 初始化：顯示儲存過的歷史紀錄
+    renderHistory();
+
+    // 2. 免按 Enter 功能：監聽 input 事件實現即時搜尋
     if (searchInput) {
-        // 1. 免按 Enter 搜尋 (即時監聽)
         searchInput.addEventListener('input', function() {
             const query = this.value.trim();
-            if (query.length > 0) {
-                // 呼叫你原本 v2 的搜尋函數，假設名稱為 searchData
-                if (typeof searchData === "function") {
-                    searchData(query);
+            
+            if (query.length >= 1) {
+                // 執行你原有的搜尋邏輯 (假設函數名為 performSearch 或執行過濾)
+                // 這裡調用你 v2 原本處理數據顯示的 function
+                if (typeof handleSearch === "function") {
+                    handleSearch(query);
+                } else if (typeof updatePreview === "function") {
+                    updatePreview(); // 如果你的 v2 是透過這個觸發
                 }
+
+                // 防抖處理：停止輸入 800ms 後才存入歷史紀錄，避免每個字都存
+                clearTimeout(this.saveTimer);
+                this.saveTimer = setTimeout(() => {
+                    saveToHistory(query);
+                }, 800);
             }
         });
 
-        // 2. 處理歷史紀錄渲染 (從 LocalStorage 讀取)
-        renderHistory();
+        // 支援原有的快捷鍵功能 (Alt+S 聚焦)
+        window.addEventListener('keydown', (e) => {
+            if (e.altKey && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                searchInput.focus();
+            }
+        });
     }
 });
 
-// 儲存歷史紀錄的函數 (可在 searchData 結束時調用)
-function saveSearchHistory(query) {
-    let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
-    history = [query, ...history.filter(item => item !== query)].slice(0, 5);
-    localStorage.setItem('searchHistory', JSON.stringify(history));
+// 3. 歷史紀錄：儲存至 LocalStorage (v3 邏輯)
+function saveToHistory(query) {
+    if (query.length < 2) return; // 太短的關鍵字不記錄
+    
+    let history = JSON.parse(localStorage.getItem('bible_search_history')) || [];
+    
+    // 移除重複並置頂，最多保留 8 個標籤
+    history = [query, ...history.filter(item => item !== query)].slice(0, 8);
+    
+    localStorage.setItem('bible_search_history', JSON.stringify(history));
     renderHistory();
 }
 
+// 4. 歷史紀錄：渲染標籤到 #historyTags
 function renderHistory() {
-    const container = document.getElementById('history-list');
+    const container = document.getElementById('historyTags');
     if (!container) return;
-    const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
-    container.innerHTML = history.map(item => 
-        `<span class="history-tag" onclick="quickSearch('${item}')">${item}</span>`
-    ).join('');
+
+    const history = JSON.parse(localStorage.getItem('bible_search_history')) || [];
+    
+    if (history.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = history.map(item => `
+        <span class="history-tag" 
+              style="display:inline-block; background:var(--bg-secondary, #eee); padding:4px 12px; border-radius:15px; margin-right:8px; cursor:pointer; font-size:12px;"
+              onclick="quickSearch('${item}')">
+            ${item}
+        </span>
+    `).join('') + `<span onclick="clearHistory()" style="cursor:pointer; color:gray; font-size:12px; margin-left:5px;">✕</span>`;
 }
 
-function quickSearch(query) {
-    const input = document.getElementById('search-input');
-    input.value = query;
-    // 觸發 input 事件以執行即時搜尋
+// 5. 點擊歷史標籤快速搜尋
+function quickSearch(val) {
+    const input = document.getElementById('bibleSearch');
+    input.value = val;
+    // 手動觸發 input 事件以啟動搜尋邏輯
     input.dispatchEvent(new Event('input'));
+}
+
+// 6. 清除歷史紀錄
+function clearHistory() {
+    if(confirm('確定清除搜尋紀錄？')) {
+        localStorage.removeItem('bible_search_history');
+        renderHistory();
+    }
 }
 
         function toggleTheme() { document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); }
     </script>
 </body>
 </html>
+
 
 
