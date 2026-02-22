@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聖經研讀系統 - FHL 整合版</title>
+    <style>
+        /* 保留您之前的 CSS 樣式 */
+        body { font-family: sans-serif; display: flex; flex-direction: column; padding: 20px; margin: 0; position: relative; background-color: #f0f2f5; }
+        .reset-button { position: absolute; top: 40px; left: 210px; z-index: 20; font-size: 0.8em; padding: 5px 10px; cursor: pointer; }
+        .header-container { display: flex; justify-content: center; width: 100%; margin-bottom: 20px; }
+        .header-controls { display: flex; align-items: center; width: fit-content; gap: 15px; background: white; padding: 10px 20px; border-radius: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .search-bar { padding: 10px; border: 1px solid #ccc; border-radius: 20px; width: 250px; }
+        .main-container { display: flex; gap: 20px; }
+        .left-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 75%; }
+        .right-panel { width: 25%; border: 1px solid #000; padding: 15px; height: 620px; background-color: white; border-radius: 8px; overflow-y: auto; }
+        .box { border: 1px solid #000; border-radius: 5px; padding: 5px; box-sizing: border-box; background-color: #f9f9f9; visibility: hidden; }
+        .multiple-select-container, .list-box-container, .right-panel-box, .header-controls, .header-container { visibility: visible; }
+        .multiple-select-container { height: 200px; grid-column: 1; grid-row: 1; }
+        .multiple-select-list { width: 100%; height: 100%; border: none; outline: none; }
+        .list-box-container { height: 410px; grid-column: 1; grid-row: 2; }
+        .single-select-list { width: 100%; height: 100%; border: none; outline: none; }
+        /* 修改或覆蓋原本的 .tab-box 樣式 */
+        .tab-box, .tab-box-bottom {
+            height: 200px;
+            display: flex; 
+            flex-direction: column;
+            gap: 5px;
+            padding: 5px;
+        }
+
+/* 確保左側面板有足夠空間顯示 4 欄 */
+.left-panel {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); 
+    grid-auto-flow: row; /* 關鍵：讓溢出的元素自動換行 */
+    gap: 10px;
+    width: 75%;
+}
+        .copyable-area { cursor: copy; transition: background-color 0.2s; }
+        .tab-title-box { border: 1px solid #ccc; padding: 5px; background-color: #e9ecef; font-weight: bold; font-size: 0.9em; }
+        .tab-content-area { border: 1px solid #ccc; padding: 8px; background-color: white; flex-grow: 1; overflow-y: auto; line-height: 1.5; font-size: 0.95em; }
+        .copy-success { background-color: #d4edda !important; }
+        .popup-window { position: fixed; display: none; background: white; border: 2px solid #007bff; border-radius: 8px; padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 1000; width: 200px; }
+        .popup-window input { width: 100%; padding: 8px; margin-top: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .popup-header { font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; }
+        .close-popup { cursor: pointer; color: #999; }
+    </style>
+</head>
+<body>
+
+    <button class="reset-button" id="resetSelectionBtn">Reset</button>
+
+    <div class="header-container">
+        <div class="header-controls">
+            <input type="text" class="search-bar" placeholder="搜尋功能..." id="globalSearch">
+            <input type="checkbox" id="checkboxSimplifiedChinese"><label for="checkboxSimplifiedChinese">簡體</label>
+            <input type="checkbox" id="checkboxGodName" checked><label for="checkboxGodName">上帝→神</label>
+            <!-- 隱藏的輸入項用於對接原邏輯 -->
+            <input type="hidden" id="currentChineses">
+            <input type="hidden" id="currentChap">
+            <input type="hidden" id="currentSec">
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="box multiple-select-container">
+                <select multiple class="multiple-select-list" id="selectList">
+                     <optgroup label="中文譯本">
+                        <option value="unv" selected>和合本</option>
+                        <option value="rcuv">和合修訂版</option>
+                        <option value="tcv2019">現中2019</option>
+                        <option value="ncv" selected="selected">新譯本</option>
+                        <option value="lcc">呂振中譯本</option>
+                        <option value="ofm">思高譯本</option>
+                        <option value="recover">恢復本</option>
+                        <option value="wcb">環球譯本</option>
+						<option value="csb"> 中文標準譯本 (限新約) </option>
+                        <option value="cbol"> 原文直譯 </option>
+                        <option value="tcv95"> 現代中文譯本 1995版 </option>
+                        <option value="cnet"> NET聖經中譯本 </option>
+						<option value="cuwv" selected="selected">文理和合本經文</option>
+                    </optgroup>
+                    <optgroup label="其他與英文">
+                        <option value="kjv">KJV (King James Version)</option>
+                        <option value="asv">ASV (American Standard Version)</option>
+                        <option value="bbe">BBE (American Standard Version)</option>
+                        <option value="web">WEB (World English Bible)</option>
+						<option value="erv">ERV (Easy-to-Read Version)</option>
+						<option value="fhlwh">新約原文</option> 
+                    </optgroup>
+                </select>
+            </div>
+
+            <div id="tab1_box" class="box tab-box"><div class="tab-title-box copyable-area"></div><div class="tab-content-area copyable-area"></div></div>
+            <div id="tab2_box" class="box tab-box"><div class="tab-title-box copyable-area"></div><div class="tab-content-area copyable-area"></div></div>
+            <div id="tab3_box" class="box tab-box"><div class="tab-title-box copyable-area"></div><div class="tab-content-area copyable-area"></div></div>
+            
+            <div class="box list-box-container">
+                <select class="single-select-list" size="20" id="bibleBookList">
+                    <option disabled>--- 舊約 ---</option>
+                    <option value="創" selected>創世記 (Genesis)</option><option value="出">出埃及記 (Exodus)</option><option value="利">利未記 (Leviticus)</option><option value="民">民數記 (Numbers)</option><option value="申">申命記 (Deuteronomy)</option><option value="書">約書亞記 (Joshua)</option><option value="士">士師記 (Judges)</option><option value="得">路得記 (Ruth)</option><option value="撒上">撒母耳記上 (1 Sam)</option><option value="撒下">撒母耳記下 (2 Sam)</option><option value="王上">列王紀上 (1 Kings)</option><option value="王下">列王紀下 (2 Kings)</option><option value="代上">歷代志上 (1 Chron)</option><option value="代下">歷代志下 (2 Chron)</option><option value="拉">以斯拉記 (Ezra)</option><option value="尼">尼希米記 (Nehemiah)</option><option value="斯">以斯帖記 (Esther)</option><option value="伯">約伯記 (Job)</option><option value="詩">詩篇 (Psalms)</option><option value="箴">箴言 (Proverbs)</option><option value="傳">傳道書 (Eccles)</option><option value="歌">雅歌 (Song of Sol)</option><option value="賽">以賽亞書 (Isaiah)</option><option value="耶">耶利米書 (Jeremiah)</option><option value="哀">耶利米哀歌 (Lam)</option><option value="結">以西結書 (Ezekiel)</option><option value="但">但以理書 (Daniel)</option><option value="何">何西阿書 (Hosea)</option><option value="珥">約珥書 (Joel)</option><option value="摩">阿摩司書 (Amos)</option><option value="俄">俄巴底亞書 (Obadiah)</option><option value="拿">約拿書 (Jonah)</option><option value="彌">彌迦書 (Micah)</option><option value="鴻">那鴻書 (Nahum)</option><option value="哈">哈巴谷書 (Habak)</option><option value="番">西番雅書 (Zephan)</option><option value="該">哈該書 (Haggai)</option><option value="亞">撒迦利亞書 (Zechar)</option><option value="瑪">瑪拉基書 (Malachi)</option>
+                    <option disabled>--- 新約 ---</option>
+                    <option value="太">馬太福音 (Matthew)</option><option value="可">馬可福音 (Mark)</option><option value="路">路加福音 (Luke)</option><option value="約">約翰福音 (John)</option><option value="徒">使徒行傳 (Acts)</option><option value="羅">羅馬書 (Romans)</option><option value="林前">哥林多前書 (1 Cor)</option><option value="林後">哥林多後書 (2 Cor)</option><option value="加">加拉太書 (Galat)</option><option value="弗">以弗所書 (Ephes)</option><option value="腓">腓立比書 (Philip)</option><option value="西">歌羅西書 (Coloss)</option><option value="帖前">帖前 (1 Thess)</option><option value="帖後">帖後 (2 Thess)</option><option value="提前">提摩太前書 (1 Tim)</option><option value="提後">提摩太後書 (2 Tim)</option><option value="多">提多書 (Titus)</option><option value="門">腓利門書 (Philemon)</option><option value="來">希伯來書 (Hebrews)</option><option value="雅">雅各書 (James)</option><option value="彼前">彼得前書 (1 Peter)</option><option value="彼後">彼得後書 (2 Peter)</option><option value="約一">約翰一書 (1 John)</option><option value="約二">約翰二書 (2 John)</option><option value="約三">約翰三書 (3 John)</option><option value="猶">猶大書 (Jude)</option><option value="啟">啟示錄 (Revelation)</option>
+                </select>
+            </div>
+
+            <div id="tab4_box" class="box tab-box-bottom"><div class="tab-title-box copyable-area"></div><div class="tab-content-area copyable-area"></div></div>
+            <div id="tab5_box" class="box tab-box-bottom"><div class="tab-title-box copyable-area"></div><div class="tab-content-area copyable-area"></div></div>
+            <div id="tab6_box" class="box tab-box-bottom"><div class="tab-title-box copyable-area"></div><div class="tab-content-area copyable-area"></div></div>
+        </div>
+
+        <div class="right-panel right-panel-box" id="displayContent">
+            <h3>內容顯示區</h3><div id="doccontext">請選擇書卷與章節...</div>
+        </div>
+    </div>
+
+    <div id="itemPopup" class="popup-window">
+        <div class="popup-header"><span id="popupTitle">書卷名</span><span class="close-popup" id="closePopupBtn">&times;</span></div>
+        <input type="text" id="popupInput" placeholder="輸入 1 或 1:1">
+    </div>
+<script>
+const tttt = { "unv": "和合本", "rcuv": "和修版", "ncv": "新譯本", "kjv": "KJV", "asv": "ASV", "bbe": "BBE", "web": "WEB", "lcc": "呂振中譯本", "ofm": "思高譯本", "tcv2019": "現中譯2019", "wcb": "環球譯本", "recover": "恢復本","tcv95":"現中譯1995", "cbol":"原文直譯","csb":"中文標準譯本","cnet":"NET聖經中譯本", "fhlwh":"新約原文","cuwv":"文理和合本經文","erv":"ERV" };
+
+function numberConvertToUppercase(num) {
+    const u = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+    const n = parseInt(num);
+    if (n <= 10) return u[n];
+    if (n < 20) return "十" + (n % 10 === 0 ? "" : u[n % 10]);
+    return n.toString();
+}
+
+// 2. 啟動查詢 (整合你的 startQuery)
+function startQuery() {
+    // 清空右側預覽
+    document.getElementById("displayContent").innerHTML = '<div id="doccontext"></div>';
+    
+    // 獲取目前選中的多個譯本
+    const selectedOptions = Array.from(document.getElementById('selectList').selectedOptions);
+    const targetTabs = document.querySelectorAll('[id^="tab"][id$="_box"]');
+    
+    // 初始化：隱藏所有 Tab
+    targetTabs.forEach(tab => tab.style.visibility = 'hidden');
+
+    // 依序為每個選中的譯本發送請求 (最多6個)
+    selectedOptions.forEach((option, index) => {
+        if (index < 6) {
+            loadBibleDoc(option.value, index + 1);
+        }
+    });
+}
+
+// 3. 處理個別譯本請求
+function loadBibleDoc(verCode, tabIndex) {
+    const xhttp = new XMLHttpRequest();
+    xhttp.onload = function() {
+        if (this.status == 200) {
+            // 對接到你的 handleResponse 邏輯，但改為更新 Tab 區塊
+            renderToTab(this.responseText, tabIndex, verCode);
+        }
+		console.log(this.responseText)
+    };
+
+    // 解析彈窗輸入的章節 (例如 1:1)
+    const book = document.getElementById("bibleBookList").value;
+    const inputVal = document.getElementById("popupInput").value || "1";
+    let chap = "1", sec = "";
+    if (inputVal.includes(':')) {
+        [chap, sec] = inputVal.split(':');
+    } else {
+        chap = inputVal;
+    }
+
+    const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
+    
+    // 構建你的原始 URL 格式 (確保有 ?)
+    let url = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
+              "&chap=" + chap + 
+              "&sec=" + sec + 
+              "&version=" + verCode + 
+              "&gb=" + gb;
+              
+    xhttp.open("GET", url, true);
+    xhttp.send();
+}
+
+function renderToTab(responseText, tabIndex, verCode) {
+    let aaobj;
+    try {
+        // 清理 JSON 中的特殊字元並解析
+        const cleanedJson = responseText.replace(/[\u3000\u000A\u000D]+/g, "");
+        aaobj = JSON.parse(cleanedJson);
+    } catch (e) {
+        console.error("JSON 解析失敗:", e);
+        return;
+    }
+
+    const tabBox = document.getElementById(`tab${tabIndex}_box`);
+    if (!tabBox) return;
+
+    // --- 0. 處理 API 失敗 (例如新譯本權限阻斷) ---
+    if (aaobj.status && aaobj.status.indexOf("Fail") !== -1) {
+        tabBox.style.visibility = "visible";
+        tabBox.querySelector('.tab-title-box').textContent = (tttt[verCode] || verCode) + " (連線受阻)";
+        tabBox.querySelector('.tab-content-area').innerText = "此譯本目前禁止自動 API 查詢。\n請確認網址是否正確，或嘗試手動貼上 JSON 資料。";
+        return;
+    }
+
+    // --- 1. 標題解析 ---
+    const book = document.getElementById("bibleBookList").value;
+    const inputVal = document.getElementById("popupInput").value || "1";
+    
+    let chapNum = "1", secIn = "";
+    if (inputVal.includes(':')) {
+        [chapNum, secIn] = inputVal.split(':').map(s => s.trim());
+    } else {
+        chapNum = inputVal.trim();
+        // 抓取最後一節的節號作為範圍結束
+        const lastSec = aaobj.record[aaobj.record_count - 1].sec;
+        secIn = (aaobj.record_count > 1) ? `1-${lastSec}` : "1";
+    }
+
+    const chapChinese = numberConvertToUppercase(chapNum);
+    const verName = tttt[verCode] || verCode;
+    const fullTitle = `${book}${chapChinese}${secIn} (${verName})`;
+
+    // --- 2. 內容生成 (整合新譯本清理邏輯) ---
+    let aa2234 = ""; // Tab 顯示內容 (純文字)
+    let aa2233 = "<font style='font-family:DFKai-SB'>「"; // 右側預覽內容
+
+    for (let i = 0; i < aaobj.record_count; i++) {
+        let item = aaobj.record[i];
+        let text = item.bible_text;
+
+        // --- [新譯本專用清理] 移除 <h1> 到 <h6> 及其內容 (如：一段小標題) ---
+        text = text.replace(/<h[1-6]>.*?<\/h[1-6]>/gi, "");
+        // 移除 |）這種特殊標記
+        text = text.replace(/\|\uff09/g, "");
+
+        // 清理所有剩餘 HTML 標籤與括號標記
+        let rawText = text.replace(/<[^>]*>/g, "")
+                          .replace(/【[^>]*】/g, "")
+                          .replace(/[\u3000\u000A\u000D]+/g, "").trim();
+
+        // 格式化輸出：節號 + 兩個全型空白 + 經文內容 + 換行 (PPT 專用)
+        aa2234 += item.sec + "　" + rawText + "\n"; 
+        aa2233 += "<sup>" + item.sec + "</sup>" + rawText;
+    }
+
+    aa2233 += "」";
+
+    // --- 3. 處理「上帝/神」與符號修正 ---
+    const useShen = document.getElementById('checkboxGodName').checked;
+    if (useShen) {
+        aa2234 = aa2234.replace(/上帝/g, "神");
+        aa2233 = aa2233.replace(/上帝/g, "神");
+    }
+    // 修正破折號長度
+    aa2234 = aa2234.replace(/─/g, "——");
+    aa2233 = aa2233.replace(/─/g, "——");
+
+    // --- 4. 更新 UI 畫面 ---
+    tabBox.style.visibility = "visible";
+    tabBox.querySelector('.tab-title-box').textContent = fullTitle;
+    // 使用 innerText 保持 PPT 換行與空白格式
+    tabBox.querySelector('.tab-content-area').innerText = aa2234;
+
+    // 更新右側詳細顯示區
+    const docContext = document.getElementById("doccontext");
+    if (docContext) {
+        docContext.innerHTML += `<div style="margin-bottom:20px; border-bottom:1px solid #eee; padding-bottom:10px;">
+            <span style="font-size:12pt; line-height:1.6;">${aa2233} <br><b><u>${fullTitle}</u></b></span>
+        </div>`;
+    }
+}
+
+
+
+// 點擊複製功能：支援標題與經文各自複製
+document.addEventListener('click', (e) => {
+    const el = e.target;
+    
+    // 檢查點擊的是「內容區域」或是「標題區域」
+    const isContent = el.classList.contains('tab-content-area');
+    const isTitle = el.classList.contains('tab-title-box');
+
+    if (isContent || isTitle) {
+        // 獲取被點擊元素的文字
+        const textToCopy = el.innerText; 
+        
+        if (!textToCopy) return;
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            // 視覺回饋：變色效果
+            el.classList.add('copy-success');
+            setTimeout(() => el.classList.remove('copy-success'), 500);
+            
+            console.log("已成功複製內容：" + textToCopy.substring(0, 10) + "...");
+        }).catch(err => {
+            console.error('無法複製', err);
+        });
+    }
+});
+
+
+// 監聽譯本清單的變動
+document.getElementById('selectList').addEventListener('change', function() {
+    // 只有在已經有書卷/章節資料的情況下才自動更新
+    const book = document.getElementById("bibleBookList").value;
+    const inputVal = document.getElementById("popupInput").value;
+    
+    if (book && inputVal) {
+        startQuery();
+    }
+});
+
+// 監聽上帝/神、簡體/繁體切換
+document.getElementById('checkboxGodName').addEventListener('change', startQuery);
+document.getElementById('checkboxSimplifiedChinese').addEventListener('change', startQuery);
+
+
+// 5. 彈窗觸發事件
+document.getElementById('bibleBookList').addEventListener('click', function(e) {
+    if (e.target.tagName === 'OPTION' && !e.target.disabled) {
+        const popup = document.getElementById('itemPopup');
+        popup.style.display = 'block';
+        popup.style.left = e.pageX + 10 + 'px';
+        popup.style.top = e.pageY + 10 + 'px';
+        document.getElementById('popupTitle').textContent = e.target.text.trim();
+        document.getElementById('popupInput').focus();
+    }
+});
+
+document.getElementById('popupInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        document.getElementById('itemPopup').style.display = 'none';
+        startQuery();
+    }
+});
+
+document.getElementById('closePopupBtn').onclick = () => document.getElementById('itemPopup').style.display = 'none';
+document.getElementById('resetSelectionBtn').onclick = () => location.reload();
+</script>
+
+</body>
+</html>
