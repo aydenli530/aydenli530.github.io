@@ -151,6 +151,7 @@ function startQuery() {
     });
 }
 
+<!--
 function loadBibleDoc(verCode, tabIndex) {
     const book = document.getElementById("bibleBookList").value;
     const inputVal = document.getElementById("popupInput").value || "1";
@@ -204,8 +205,48 @@ function loadBibleDoc(verCode, tabIndex) {
 
     fetchBible(originalUrl, false);
 }
+//-->
 
+function loadBibleDoc(verCode, tabIndex) {
+    const book = document.getElementById("bibleBookList").value;
+    const inputVal = document.getElementById("popupInput").value || "1";
+    let chap = "1", sec = "";
+    if (inputVal.includes(':')) {
+        [chap, sec] = inputVal.split(':');
+    } else {
+        chap = inputVal;
+    }
+    const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
+    
+    // 1. 原始 FHL 網址
+    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
+              "&chap=" + chap + 
+              "&sec=" + sec + 
+              "&version=" + verCode + 
+              "&gb=" + gb;
 
+    // 2. 你的 Cloudflare Worker 網址
+    const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
+
+    const xhttp = new XMLHttpRequest();
+    xhttp.onload = function() {
+        if (this.status == 200) {
+            // 直接渲染內容，Worker 已經處理好 CORS 與原始格式
+            renderToTab(this.responseText, tabIndex, verCode);
+        } else {
+            console.error("Worker 請求失敗，狀態碼: " + this.status);
+        }
+    };
+
+    xhttp.onerror = function() {
+        console.error("網路錯誤或 Worker 無法存取");
+    };
+
+    xhttp.open("GET", myWorkerUrl, true);
+    xhttp.send();
+}
+
+	
 function renderToTab(responseText, tabIndex, verCode) {
     let aaobj;
     try {
@@ -366,6 +407,7 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
 
 
