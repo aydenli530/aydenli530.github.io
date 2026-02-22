@@ -158,7 +158,7 @@ function startQuery() {
         }
     });
 }
-	
+<!--	
 async function loadBibleDoc(verCode, tabIndex) {
     // 1. 取得 DOM 數值
     const book = document.getElementById("bibleBookList").value;
@@ -227,6 +227,87 @@ async function loadBibleDoc(verCode, tabIndex) {
         clearTimeout(timeoutId);
         console.error("連線錯誤:", err);
         if (typeof turnstile !== 'undefined') turnstile.reset();
+    }
+}
+//-->
+
+async function loadBibleDoc(verCode, tabIndex) {
+    // 1. 取得 DOM 數值
+    const book = document.getElementById("bibleBookList").value;
+    const inputVal = document.getElementById("popupInput").value || "1";
+    const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
+    let [chap, sec] = inputVal.includes(':') ? inputVal.split(':') : [inputVal, ""];
+    
+    // 2. 構造原始 URL
+    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
+              "&chap=" + chap + 
+              "&sec=" + sec + 
+              "&version=" + verCode + 
+              "&gb=" + gb;
+              
+    const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
+
+    // 封裝請求邏輯
+    const fetchData = async (url, useToken = false) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 縮短直連超時，提昇體驗
+        
+        const options = {
+            method: "GET",
+            signal: controller.signal
+        };
+
+        // 只有經由 Proxy 時才帶 Token
+        if (useToken) {
+            const turnstileToken = turnstile.getResponse();
+            if (turnstileToken) {
+                options.headers = { "X-Turnstile-Token": turnstileToken };
+            }
+        }
+
+        try {
+            const response = await fetch(url, options);
+            clearTimeout(timeoutId);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.text();
+        } catch (err) {
+            clearTimeout(timeoutId);
+            throw err; // 向上拋出以便 catch 塊處理切換
+        }
+    };
+
+    try {
+        // 策略 A: 嘗試直連 (Direct Fetch)
+        console.log("嘗試直接連線...");
+        const data = await fetchData(originalUrl);
+        renderToTab(data, tabIndex, verCode);
+        console.log("直連成功");
+
+    } catch (err) {
+        // 策略 B: 發生錯誤 (包括 CORS block 或網路問題)，使用 Proxy
+        console.warn("直連失敗或受 CORS 限制，切換至 Proxy...", err);
+
+        // 檢查 Turnstile 狀態 (僅在使用 Proxy 前檢查)
+        if (typeof turnstile === 'undefined') {
+            console.error("Turnstile SDK 未載入");
+            return;
+        }
+
+        const token = turnstile.getResponse();
+        if (!token) {
+            console.warn("無 Token，觸發驗證...");
+            turnstile.execute('#turnstile-container');
+            return;
+        }
+
+        try {
+            const proxyData = await fetchData(myWorkerUrl, true);
+            renderToTab(proxyData, tabIndex, verCode);
+            turnstile.reset(); // 成功後重置
+        } catch (proxyErr) {
+            console.error("Proxy 連線亦失敗:", proxyErr);
+            turnstile.reset();
+        }
     }
 }
 	
@@ -392,6 +473,7 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
 
 
