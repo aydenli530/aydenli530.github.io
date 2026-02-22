@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-	<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=turnstileLoad" async defer></script>
+	<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=initializeTurnstile" async defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聖經研讀系統 - FHL 整合版</title>
@@ -124,6 +124,9 @@
 <script>
 const tttt = { "unv": "和合本", "rcuv": "和修版", "ncv": "新譯本", "kjv": "KJV", "asv": "ASV", "bbe": "BBE", "web": "WEB", "lcc": "呂振中譯本", "ofm": "思高譯本", "tcv2019": "現中譯2019", "wcb": "環球譯本", "recover": "恢復本","tcv95":"現中譯1995", "cbol":"原文直譯","csb":"中文標準譯本","cnet":"NET聖經中譯本", "fhlwh":"新約原文","cuwv":"文理和合本經文","erv":"ERV" };
 
+// 確保全域變數存在
+window.tsWidgetId = null;
+	
 function numberConvertToUppercase(num) {
     const u = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
     const n = parseInt(num);
@@ -483,9 +486,6 @@ document.getElementById('popupInput').addEventListener('keypress', function(e) {
 document.getElementById('closePopupBtn').onclick = () => document.getElementById('itemPopup').style.display = 'none';
 document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
-// 確保全域變數存在
-window.tsWidgetId = null;
-
 function initializeTurnstile() {
     if (typeof turnstile !== 'undefined') {
         window.tsWidgetId = turnstile.render('#turnstile-container', {
@@ -507,6 +507,7 @@ window.addEventListener('load', initializeTurnstile);
 
 </body>
 </html>
+
 
 
 
