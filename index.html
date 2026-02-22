@@ -249,7 +249,7 @@ function loadBibleDoc(verCode, tabIndex) {
     xhttp.open("GET", myWorkerUrl, true);
     xhttp.send();
 }
-//-->
+
 	
 async function loadBibleDoc(verCode, tabIndex) {
     // 1. 取得 DOM 數值
@@ -327,7 +327,67 @@ async function loadBibleDoc(verCode, tabIndex) {
         if (typeof turnstile !== 'undefined') turnstile.reset(window.tsWidgetId);
     }
 }
+//-->
+async function loadBibleDoc(verCode, tabIndex) {
+    const book = document.getElementById("bibleBookList").value;
+    const inputVal = document.getElementById("popupInput").value || "1";
+    let [chap, sec] = inputVal.includes(':') ? inputVal.split(':') : [inputVal, ""];
+    const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
+    
+    // 檢查 SDK 狀態
+    if (typeof turnstile === 'undefined' || window.tsWidgetId === null) {
+        alert("安全驗證元件尚未準備好，請稍候或重新整理頁面。");
+        return;
+    }
 
+    // 取得當前的驗證 Token
+    const turnstileToken = turnstile.getResponse(window.tsWidgetId);
+    
+    if (!turnstileToken) {
+        alert("請先完成下方的安全驗證（點擊驗證框）");
+        // 自動滾動到驗證框，增加使用者體驗
+        document.getElementById("turnstile-container").scrollIntoView({ behavior: 'smooth' });
+        return;
+    }
+
+let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
+              "&chap=" + chap + 
+              "&sec=" + sec + 
+              "&version=" + verCode + 
+              "&gb=" + gb;
+              
+    const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
+
+    try {
+        const response = await fetch(myWorkerUrl, {
+            method: "GET",
+            headers: {
+                "X-Turnstile-Token": turnstileToken
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.text();
+            renderToTab(data, tabIndex, verCode);
+            
+            /**
+             * 成功後建議重置驗證碼
+             * 因為 Turnstile Token 通常是一次性的，重置可確保下次查詢依然安全
+             */
+            turnstile.reset(window.tsWidgetId); 
+        } else if (response.status === 403 || response.status === 401) {
+            alert("安全驗證已過期，請重新點擊驗證框。");
+            turnstile.reset(window.tsWidgetId);
+        } else {
+            console.error(`Worker 報錯: ${response.status}`);
+        }
+    } catch (err) {
+        console.error("網路連線異常:", err);
+        // 如果發生錯誤，也重置驗證碼清空狀態
+        if (window.tsWidgetId) turnstile.reset(window.tsWidgetId);
+    }
+}
+	
 	
 function renderToTab(responseText, tabIndex, verCode) {
     let aaobj;
@@ -507,6 +567,7 @@ window.addEventListener('load', initializeTurnstile);
 
 </body>
 </html>
+
 
 
 
