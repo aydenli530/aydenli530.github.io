@@ -181,7 +181,7 @@ function loadBibleDoc(verCode, tabIndex) {
               "&version=" + verCode + 
               "&gb=" + gb;
 
-    const proxyUrl = "https://corsproxy.io/?url=" + encodeURIComponent(url);
+    const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
 	
     xhttp.open("GET", proxyUrl, true);
     xhttp.send();
@@ -347,4 +347,5 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
