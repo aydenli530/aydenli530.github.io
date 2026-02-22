@@ -381,40 +381,57 @@ function renderDevSpecs() {
      
 const searchInput = document.getElementById('searchInput');
 
-// 監聽輸入事件，實現免按 Enter 即時搜尋
-searchInput.addEventListener('input', () => {
-    const query = searchInput.value.trim();
-    if (query) {
-        search(query); // 呼叫你現有的搜尋函數
-    } else {
-        clearResults(); // 若清空輸入框，則清空搜尋結果
+// 確保 DOM 完全載入後才執行
+document.addEventListener('DOMContentLoaded', () => {
+    // 修正 ID：v2 使用的是 'search-input'
+    const searchInput = document.getElementById('search-input');
+    const resultsContainer = document.getElementById('results-container'); 
+    const historyList = document.getElementById('history-list'); // 確保 HTML 有此 ID
+
+    if (searchInput) {
+        // 1. 免按 Enter 搜尋 (即時監聽)
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            if (query.length > 0) {
+                // 呼叫你原本 v2 的搜尋函數，假設名稱為 searchData
+                if (typeof searchData === "function") {
+                    searchData(query);
+                }
+            }
+        });
+
+        // 2. 處理歷史紀錄渲染 (從 LocalStorage 讀取)
+        renderHistory();
     }
 });
-     
+
+// 儲存歷史紀錄的函數 (可在 searchData 結束時調用)
 function saveSearchHistory(query) {
     let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
-    // 移除重複並將新紀錄排在最前
-    history = [query, ...history.filter(item => item !== query)].slice(0, 10); 
+    history = [query, ...history.filter(item => item !== query)].slice(0, 5);
     localStorage.setItem('searchHistory', JSON.stringify(history));
-    renderHistory(); // 更新介面顯示
+    renderHistory();
 }
-     
+
 function renderHistory() {
-    const historyContainer = document.getElementById('historyList');
+    const container = document.getElementById('history-list');
+    if (!container) return;
     const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
-    
-    historyContainer.innerHTML = history.map(item => 
-        `<span class="history-item" onclick="quickSearch('${item}')">${item}</span>`
+    container.innerHTML = history.map(item => 
+        `<span class="history-tag" onclick="quickSearch('${item}')">${item}</span>`
     ).join('');
 }
 
-// 點擊歷史紀錄快速搜尋
 function quickSearch(query) {
-    document.getElementById('searchInput').value = query;
-    search(query);
+    const input = document.getElementById('search-input');
+    input.value = query;
+    // 觸發 input 事件以執行即時搜尋
+    input.dispatchEvent(new Event('input'));
 }
+
         function toggleTheme() { document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); }
     </script>
 </body>
 </html>
+
 
