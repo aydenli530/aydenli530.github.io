@@ -248,19 +248,6 @@ function loadBibleDoc(verCode, tabIndex) {
 }
 //-->
 	
-// 全域變數或在初始化時渲染 Turnstile	
-window.onload = function() {
-    if (typeof turnstile !== 'undefined') {
-        // 明確渲染驗證碼到容器中
-        window.tsWidgetId = turnstile.render('#turnstile-container', {
-            sitekey: '0x4AAAAAACgckTL_y_96U7Cj', // 👈 請務必填入你的 Site Key
-            callback: function(token) {
-                console.log("驗證成功");
-            }
-        });
-    }
-};
-
 async function loadBibleDoc(verCode, tabIndex) {
     // 1. 取得 DOM 數值
     const book = document.getElementById("bibleBookList").value;
@@ -495,10 +482,32 @@ document.getElementById('popupInput').addEventListener('keypress', function(e) {
 
 document.getElementById('closePopupBtn').onclick = () => document.getElementById('itemPopup').style.display = 'none';
 document.getElementById('resetSelectionBtn').onclick = () => location.reload();
+
+// 確保全域變數存在
+window.tsWidgetId = null;
+
+function initializeTurnstile() {
+    if (typeof turnstile !== 'undefined') {
+        window.tsWidgetId = turnstile.render('#turnstile-container', {
+            sitekey: '0x4AAAAAACgckTL_y_96U7Cj', // 👈 這裡請務必填入您的 Site Key
+            callback: function(token) {
+                console.log("驗證碼初始化成功");
+            }
+        });
+    } else {
+        // 如果還沒載入，過 0.5 秒再試一次
+        setTimeout(initializeTurnstile, 500);
+    }
+}
+
+// 頁面載入後啟動
+window.addEventListener('load', initializeTurnstile);
+	
 </script>
 
 </body>
 </html>
+
 
 
 
