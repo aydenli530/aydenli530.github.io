@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-	<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=initializeTurnstile" async defer></script>
+	<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聖經研讀系統 - FHL 整合版</title>
@@ -48,8 +48,12 @@
         .close-popup { cursor: pointer; color: #999; }
     </style>
 </head>
-<body>
-    <div id="turnstile-container"></div>
+<body> 
+     <div class="cf-turnstile" 
+         id="turnstile-container" 
+         data-sitekey="0x4AAAAAACgckTL_y_96U7Cj" 
+         data-appearance="interaction-only">
+    </div>
     <button class="reset-button" id="resetSelectionBtn">Reset</button>
 
     <div class="header-container">
@@ -154,102 +158,6 @@ function startQuery() {
         }
     });
 }
-
-<!--
-function loadBibleDoc(verCode, tabIndex) {
-    const book = document.getElementById("bibleBookList").value;
-    const inputVal = document.getElementById("popupInput").value || "1";
-    let chap = "1", sec = "";
-    if (inputVal.includes(':')) {
-        [chap, sec] = inputVal.split(':');
-    } else {
-        chap = inputVal;
-    }
-    const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
-    
-    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
-              "&chap=" + chap + 
-              "&sec=" + sec + 
-              "&version=" + verCode + 
-              "&gb=" + gb;
-
-    function fetchBible(url, isProxy = false) {
-        const xhttp = new XMLHttpRequest();
-        xhttp.onload = function() {
-            if (this.status == 200) {
-                let data = this.responseText;
-                if (isProxy) {
-                    try {
-                        // AllOrigins /get 模式會回傳 JSON，內容在 .contents
-                        const json = JSON.parse(this.responseText);
-                        data = json.contents;
-                    } catch (e) {
-                        console.error("解析代理資料失敗", e);
-                    }
-                }
-                renderToTab(data, tabIndex, verCode);
-            } else if (!isProxy) {
-                tryProxy();
-            }
-        };
-
-        xhttp.onerror = function() {
-            if (!isProxy) tryProxy();
-        };
-
-        xhttp.open("GET", url, true);
-        xhttp.send();
-    }
-
-    function tryProxy() {
-        // 使用 /get 而不是 /raw，這對 'null' origin 支援度較好
-        const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(originalUrl);
-        fetchBible(proxyUrl, true);
-    }
-
-    fetchBible(originalUrl, false);
-}
-
-
-function loadBibleDoc(verCode, tabIndex) {
-    const book = document.getElementById("bibleBookList").value;
-    const inputVal = document.getElementById("popupInput").value || "1";
-    let chap = "1", sec = "";
-    if (inputVal.includes(':')) {
-        [chap, sec] = inputVal.split(':');
-    } else {
-        chap = inputVal;
-    }
-    const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
-    
-    // 1. 原始 FHL 網址
-    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
-              "&chap=" + chap + 
-              "&sec=" + sec + 
-              "&version=" + verCode + 
-              "&gb=" + gb;
-
-    // 2. 你的 Cloudflare Worker 網址
-    const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
-
-    const xhttp = new XMLHttpRequest();
-    xhttp.onload = function() {
-        if (this.status == 200) {
-            // 直接渲染內容，Worker 已經處理好 CORS 與原始格式
-            renderToTab(this.responseText, tabIndex, verCode);
-        } else {
-            console.error("Worker 請求失敗，狀態碼: " + this.status);
-        }
-    };
-
-    xhttp.onerror = function() {
-        console.error("網路錯誤或 Worker 無法存取");
-    };
-
-    xhttp.open("GET", myWorkerUrl, true);
-    xhttp.send();
-}
-//-->
 	
 async function loadBibleDoc(verCode, tabIndex) {
     // 1. 取得 DOM 數值
@@ -261,21 +169,24 @@ async function loadBibleDoc(verCode, tabIndex) {
     // 2. 嚴格檢查 Turnstile 狀態
     if (typeof turnstile === 'undefined') {
         console.error("Turnstile SDK 未載入");
-        //alert("安全驗證元件尚未準備好，請稍候或重新整理頁面。");
         return;
     }
 
-    // 取得 Token (確保 window.tsWidgetId 已在 window.onload 中初始化)
-    const turnstileToken = turnstile.getResponse(window.tsWidgetId);
+    /**
+     * 3. 取得 Token
+     * 在隱身模式下，SDK 會自動管理單一 Widget。
+     * 直接使用 turnstile.getResponse() 即可抓取目前可用的 Token。
+     */
+    const turnstileToken = turnstile.getResponse();
     
     if (!turnstileToken) {
-        //alert("請先點擊下方的『安全驗證框』進行人工驗證。");
-        // 滾動到驗證框位置提醒使用者
-        document.getElementById("turnstile-container")?.scrollIntoView({ behavior: 'smooth' });
+        console.warn("驗證 Token 尚未產生，正在嘗試背景觸發...");
+        // 在隱身模式下，如果沒有 Token，通常需要手動執行一次 execute 觸發
+        turnstile.execute('#turnstile-container');
         return;
     }
    
-    // 3. 構造 URL
+    // 4. 構造 URL
     let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
               "&chap=" + chap + 
               "&sec=" + sec + 
@@ -284,17 +195,16 @@ async function loadBibleDoc(verCode, tabIndex) {
               
     const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
 
-    // 4. 發送帶有超時控制的請求
+    // 5. 發送帶有超時控制的請求
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒自動斷開
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
         const response = await fetch(myWorkerUrl, {
             method: "GET",
             signal: controller.signal,
             headers: {
-                "X-Turnstile-Token": turnstileToken,
-                "X-Requested-With": "XMLHttpRequest" // 增加此 Header 有助於通過某些 WAF 檢查
+                "X-Turnstile-Token": turnstileToken
             }
         });
 
@@ -304,30 +214,22 @@ async function loadBibleDoc(verCode, tabIndex) {
             const data = await response.text();
             renderToTab(data, tabIndex, verCode);
             
-            // 成功後建議重置驗證碼 (GitHub Pages 靜態環境建議每次成功都重置)
-            turnstile.reset(window.tsWidgetId); 
+            // 成功後重置，確保下一次查詢依然安全且能獲得新 Token
+            turnstile.reset(); 
         } else {
-            // 針對 401/403 (驗證失敗) 做處理
             if (response.status === 403 || response.status === 401) {
-                alert("安全驗證已過期，請重新點擊驗證框。");
-            } else {
-                alert(`伺服器回應錯誤 (${response.status})，請稍後再試。`);
+                console.error("Worker 驗證失敗，請檢查 Secret Key 設定");
+                // 隱身模式下驗證失敗通常會自動重置
             }
-            turnstile.reset(window.tsWidgetId);
+            turnstile.reset();
         }
     } catch (err) {
         clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
-            alert("請求超時，請檢查您的網路連線或關閉廣告攔截器。");
-        } else {
-            console.error("連線錯誤:", err);
-            alert("無法連接到 API 伺服器，請確認 Worker 運作正常。");
-        }
-        // 發生通訊錯誤時也重置驗證碼以清空狀態
-        if (typeof turnstile !== 'undefined') turnstile.reset(window.tsWidgetId);
+        console.error("連線錯誤:", err);
+        if (typeof turnstile !== 'undefined') turnstile.reset();
     }
 }
-
+	
 
 	
 function renderToTab(responseText, tabIndex, verCode) {
@@ -486,29 +388,11 @@ document.getElementById('popupInput').addEventListener('keypress', function(e) {
 
 document.getElementById('closePopupBtn').onclick = () => document.getElementById('itemPopup').style.display = 'none';
 document.getElementById('resetSelectionBtn').onclick = () => location.reload();
-
-function initializeTurnstile() {
-    if (typeof turnstile !== 'undefined') {
-        window.tsWidgetId = turnstile.render('#turnstile-container', {
-            sitekey: '0x4AAAAAACgckTL_y_96U7Cj', // 👈 這裡請務必填入您的 Site Key
-			 appearance: 'interaction-only', 
-            callback: function(token) {
-                console.log("驗證碼初始化成功");
-            }
-        });
-    } else {
-        // 如果還沒載入，過 0.5 秒再試一次
-        setTimeout(initializeTurnstile, 500);
-    }
-}
-
-// 頁面載入後啟動
-window.addEventListener('load', initializeTurnstile);
-	
 </script>
 
 </body>
 </html>
+
 
 
 
