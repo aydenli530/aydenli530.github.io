@@ -378,10 +378,43 @@ function renderDevSpecs() {
     document.getElementById('promptContent').innerText = "FHL API 集成範例...";
     document.getElementById('checklistContent').innerText = "1. 異常監控 [OK]\n2. 跨節抓取 [OK]\n3. 自動清除標籤 [OK]";
 }
+     
+const searchInput = document.getElementById('searchInput');
 
+// 監聽輸入事件，實現免按 Enter 即時搜尋
+searchInput.addEventListener('input', () => {
+    const query = searchInput.value.trim();
+    if (query) {
+        search(query); // 呼叫你現有的搜尋函數
+    } else {
+        clearResults(); // 若清空輸入框，則清空搜尋結果
+    }
+});
+     
+function saveSearchHistory(query) {
+    let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+    // 移除重複並將新紀錄排在最前
+    history = [query, ...history.filter(item => item !== query)].slice(0, 10); 
+    localStorage.setItem('searchHistory', JSON.stringify(history));
+    renderHistory(); // 更新介面顯示
+}
+     
+function renderHistory() {
+    const historyContainer = document.getElementById('historyList');
+    const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+    
+    historyContainer.innerHTML = history.map(item => 
+        `<span class="history-item" onclick="quickSearch('${item}')">${item}</span>`
+    ).join('');
+}
 
-
+// 點擊歷史紀錄快速搜尋
+function quickSearch(query) {
+    document.getElementById('searchInput').value = query;
+    search(query);
+}
         function toggleTheme() { document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); }
     </script>
 </body>
 </html>
+
