@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
+	<script src="https://challenges.cloudflare.com"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>聖經研讀系統 - FHL 整合版</title>
@@ -47,10 +48,8 @@
         .close-popup { cursor: pointer; color: #999; }
     </style>
 </head>
-<div id="turnstile-container"></div>
-<script src="https://challenges.cloudflare.com"></script>
 <body>
-
+    <div id="turnstile-container"></div>
     <button class="reset-button" id="resetSelectionBtn">Reset</button>
 
     <div class="header-container">
@@ -249,44 +248,54 @@ function loadBibleDoc(verCode, tabIndex) {
 }
 //-->
 	
-// 全域變數或在初始化時渲染 Turnstile
-let tsWidgetId;
+// 全域變數或在初始化時渲染 Turnstile	
 window.onload = function() {
     if (typeof turnstile !== 'undefined') {
-        tsWidgetId = turnstile.render('#turnstile-container', {
-            sitekey: '0x4AAAAAACgckTL_y_96U7Cj', // 👈 這裡換成你的 Site Key
-            callback: function(token) { console.log("驗證成功"); },
+        // 明確渲染驗證碼到容器中
+        window.tsWidgetId = turnstile.render('#turnstile-container', {
+            sitekey: '0x4AAAAAACgckTL_y_96U7Cj', // 👈 請務必填入你的 Site Key
+            callback: function(token) {
+                console.log("驗證成功");
+            }
         });
     }
 };
-
+	
 async function loadBibleDoc(verCode, tabIndex) {
     const book = document.getElementById("bibleBookList").value;
     const inputVal = document.getElementById("popupInput").value || "1";
     let [chap, sec] = inputVal.includes(':') ? inputVal.split(':') : [inputVal, ""];
     const gb = document.getElementById('checkboxSimplifiedChinese').checked ? 1 : 0;
     
-    // 取得 Turnstile Token
-    const turnstileToken = turnstile.getResponse(tsWidgetId);
-    if (!turnstileToken) {
-        alert("請先完成安全驗證 (點擊網頁上的驗證框)");
+    // 1. 檢查 Turnstile SDK 是否載入
+    if (typeof turnstile === 'undefined') {
+        alert("安全驗證元件載入中，請稍候再試或重新整理頁面。");
         return;
     }
 
+    // 2. 取得 Token (使用 window.tsWidgetId 確保跨函式存取)
+    const turnstileToken = turnstile.getResponse(window.tsWidgetId);
+    
+    if (!turnstileToken) {
+        alert("請先完成下方的安全驗證（點擊驗證框）");
+        return;
+    }
    
-	    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
+    // 3. 構造原始 URL 與 Worker Proxy URL
+    let originalUrl = "https://bible.fhl.net/json/qb.php?chineses=" + encodeURIComponent(book) + 
               "&chap=" + chap + 
               "&sec=" + sec + 
               "&version=" + verCode + 
               "&gb=" + gb;
+              
     const myWorkerUrl = "https://bible.q8g9tnm8r7.workers.dev/?url=" + encodeURIComponent(originalUrl);
 
-
     try {
+        // 4. 發送帶有驗證 Token 的請求
         const response = await fetch(myWorkerUrl, {
             method: "GET",
             headers: {
-                "X-Turnstile-Token": turnstileToken // 👈 傳送 Token 給 Worker
+                "X-Turnstile-Token": turnstileToken
             }
         });
 
@@ -294,18 +303,21 @@ async function loadBibleDoc(verCode, tabIndex) {
             const data = await response.text();
             renderToTab(data, tabIndex, verCode);
             
-            // 每次成功後重置驗證碼，防止 Token 被重複利用 (安全性最高)
-            turnstile.reset(tsWidgetId); 
+            // 成功後重置驗證碼，防止 Token 被重複利用
+            turnstile.reset(window.tsWidgetId); 
         } else if (response.status === 403 || response.status === 401) {
-            alert("安全驗證失效，請重新驗證");
-            turnstile.reset(tsWidgetId);
+            alert("安全驗證失效或權限不足，請重新驗證。");
+            turnstile.reset(window.tsWidgetId);
         } else {
             console.error("Worker 請求失敗，狀態碼: " + response.status);
+            alert("伺服器錯誤，請稍後再試。");
         }
     } catch (err) {
         console.error("網路錯誤: " + err.message);
+        alert("無法連線至伺服器，請檢查網路。");
     }
 }
+
 
 	
 function renderToTab(responseText, tabIndex, verCode) {
@@ -468,6 +480,7 @@ document.getElementById('resetSelectionBtn').onclick = () => location.reload();
 
 </body>
 </html>
+
 
 
 
