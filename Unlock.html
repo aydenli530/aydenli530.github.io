@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <title>Excel 批量密碼移除器 (原樣保留版)</title>
+    <script src="./js/jszip.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 50px; background: #f8f9fa; }
+        .container { width: 500px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+        #dropZone { width: 100%; height: 150px; border: 3px dashed #007bff; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #fff; cursor: pointer; color: #007bff; font-weight: bold; transition: 0.3s; box-sizing: border-box; }
+        #dropZone.dragover { background: #e7f1ff; border-color: #0056b3; transform: scale(1.02); }
+        #status { margin-top: 20px; font-size: 14px; color: #333; text-align: left; max-height: 200px; overflow-y: auto; padding: 10px; border-top: 1px solid #eee; }
+        .file-item { margin: 5px 0; padding: 5px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Excel 批量解除保護</h2>
+        <p style="font-size: 13px; color: #666;">支援 .xlsx / .xlsm | 100% 保留樣式與巨集</p>
+        
+        <div id="dropZone">點擊或拖放多個檔案到此處</div>
+        
+        <div id="status">準備就緒。</div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const status = document.getElementById('status');
+
+        // 拖放事件
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('dragover'); };
+        dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        };
+
+        // 點擊選擇
+        dropZone.onclick = () => {
+            let input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true; // 支援多選
+            input.accept = '.xlsx, .xlsm';
+            input.onchange = (e) => handleFiles(e.target.files);
+            input.click();
+        };
+
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            status.innerHTML = "<b>處理進度：</b><br>";
+
+            // 同時處理所有選中的檔案
+            const tasks = Array.from(files).map(file => processSingleFile(file));
+            await Promise.all(tasks);
+        }
+
+        async function processSingleFile(file) {
+            const fileName = file.name;
+            const fileStatusId = 'status-' + Math.random().toString(36).substr(2, 9);
+            
+            // 在狀態欄新增一行
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.innerHTML = `<span>${fileName}</span><span id="${fileStatusId}">正在處理...</span>`;
+            status.appendChild(item);
+
+            try {
+                const zip = new JSZip();
+                const loadedZip = await zip.loadAsync(file);
+                let modified = false;
+
+                // 獲取 xl/worksheets 目錄下的所有檔案
+                const worksheetFolder = loadedZip.folder("xl/worksheets");
+                if (!worksheetFolder) throw new Error("無效的 Excel 結構");
+
+                const promises = [];
+                worksheetFolder.forEach((relativePath, fileEntry) => {
+                    if (relativePath.endsWith(".xml")) {
+                        const p = fileEntry.async("string").then(content => {
+                            // 模擬 Batch 的正則替換：移除 <sheetProtection ... />
+                            if (content.includes("<sheetProtection")) {
+                                const newContent = content.replace(/<sheetProtection[^>]*\/>/g, "");
+                                loadedZip.file(fileEntry.name, newContent);
+                                modified = true;
+                            }
+                        });
+                        promises.push(p);
+                    }
+                });
+
+                await Promise.all(promises);
+
+                // 生成並下載
+                const blob = await loadedZip.generateAsync({
+                    type: "blob",
+                    compression: "DEFLATE",
+                    mimeType: file.type
+                });
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                const extension = fileName.split('.').pop();
+                const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
+                a.download = `${baseName}_Unprotected.${extension}`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                document.getElementById(fileStatusId).innerHTML = '<span class="success">成功！</span>';
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById(fileStatusId).innerHTML = '<span class="error">失敗</span>';
+            }
+        }
+    </script>
+</body>
+</html>
