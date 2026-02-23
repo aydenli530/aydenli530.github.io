@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>DIALux 數據精確提取 - 行掃描版</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f4f8; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .upload-section { border: 2px dashed #007bff; background: #f8fbff; padding: 30px; text-align: center; border-radius: 8px; cursor: pointer; margin-bottom: 25px; }
+        .area-block { border: 1px solid #ddd; margin-bottom: 30px; padding: 20px; border-radius: 8px; background: #fff; border-left: 6px solid #e74c3c; }
+        .area-title { font-size: 1.5em; font-weight: bold; color: #2c3e50; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
+        .stat-card { background: #fff5f5; padding: 12px; border-radius: 6px; border: 1px solid #feb2b2; }
+        .stat-card label { font-size: 0.85em; color: #718096; display: block; }
+        .stat-card b { font-size: 1.25em; color: #c53030; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #edf2f7; padding: 12px; text-align: left; }
+        th { background: #f7fafc; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>照明報表數據提取 (精確行對齊版)</h2>
+    <div class="upload-section" onclick="document.getElementById('file-input').click()">
+        <strong>點擊上傳 PDF</strong>
+        <input type="file" id="file-input" accept=".pdf" style="display:none">
+    </div>
+    <div id="results-container"></div>
+</div>
+
+<script src="./js/pdf.js"></script>
+<script>
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+pdfjsLib.GlobalWorkerOptions.workerSrc = './js/pdf.worker.js';
+
+document.getElementById('file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const container = document.getElementById('results-container');
+    container.innerHTML = "解析中...";
+    
+    const reader = new FileReader();
+    reader.onload = async function() {
+        const typedarray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+        container.innerHTML = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            const items = textContent.items.map(item => ({
+                str: item.str.trim(),
+                x: item.transform[4],
+                y: item.transform[5]
+            })).filter(i => i.str !== "");
+
+            const fullPageText = items.map(i => i.str).join(' ');
+			
+			    // 將內容掛載到全局變數，方便你在 Console 調試
+    window.debugText = fullPageText; 
+    console.log(`第 ${i} 頁內容：`, fullPageText);
+
+            // 只要頁面包含關鍵字就嘗試解析
+            if (fullPageText.toLowerCase().includes("workplane")) {
+                renderProcessedData(items);
+            }
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+function renderProcessedData(items) {
+    const fullText = items.map(i => i.str).join(' ');
+
+    // 1. 提取區域名稱
+    const summaryObj = items.find(i => i.str.toLowerCase().includes("summary"));
+    let areaName = items.find(i => Math.abs(i.y - (summaryObj?.y || 0)) < 5 && i !== summaryObj)?.str || "區域";
+    areaName = areaName.replace(/\//g, '').replace(/summary/i, '').trim();
+
+    // 2. 提取面積
+    const areaMatch = fullText.match(/Ground\s*area[:\s]+([\d.]+)/i);
+    const areaValue = areaMatch ? areaMatch[1] + " m²" : "-";
+
+    // 3. 提取 Workplane (Eav 與 u0)
+    const wpObj = items.find(i => i.str.toLowerCase().includes("workplane"));
+    let lux = "-", u0 = "-";
+    if (wpObj) {
+        const wpNums = items.filter(i => Math.abs(i.y - wpObj.y) < 5 && /^[0-9.]+$/.test(i.str)).sort((a,b) => a.x - b.x);
+        lux = wpNums[0] ? wpNums[0].str + " lx" : "-";
+        u0 = wpNums[3] ? wpNums[3].str : "-";
+    }
+
+    // 4. 建立 UI
+    const container = document.getElementById('results-container');
+    const areaDiv = document.createElement('div');
+    areaDiv.className = 'area-block';
+    areaDiv.innerHTML = `
+        <div class="area-title">${areaName}</div>
+        <div class="stats-grid">
+            <div class="stat-card"><label>地面面積 (Ground Area)</label><b>${areaValue}</b></div>
+            <div class="stat-card"><label>平均照度 (Eav)</label><b>${lux}</b></div>
+            <div class="stat-card"><label>均勻度 (u0)</label><b>${u0}</b></div>
+        </div>
+        <table>
+            <thead><tr><th>數量</th><th>燈款名稱</th><th>功率 (W)</th></tr></thead>
+            <tbody class="part-body"></tbody>
+        </table>
+    `;
+    container.appendChild(areaDiv);
+
+    // 5. 燈具列表提取
+    const tbody = areaDiv.querySelector('.part-body');
+    const piecesHeader = items.find(i => i.str === "Pieces");
+    const pHeader = items.find(i => i.str.includes("P [W]"));
+
+    if (piecesHeader) {
+        const rowGroups = [];
+        // 【修正 1】座標方向：表格內容在標題下方，所以 y 應該「小於」piecesHeader.y
+        const subItems = items
+            .filter(item => item.y < piecesHeader.y - 5) 
+            .sort((a, b) => b.y - a.y); // 從上往下排 (Y 大到小)
+
+        subItems.forEach(item => {
+            let target = rowGroups.find(r => Math.abs(r.y - item.y) < 12); // 放大容許值到 12
+            if (!target) {
+                target = { y: item.y, items: [] };
+                rowGroups.push(target);
+            }
+            target.items.push(item);
+        });
+
+        rowGroups.sort((a, b) => b.y - a.y).forEach(group => {
+            const rowItems = group.items.sort((a, b) => a.x - b.x);
+            
+            // 【修正 2】更強健的數量判斷：座標在 Pieces 標題附近且為純數字
+            const countObj = rowItems.find(i => i.x > 100 && i.x < 150 && /^\d+$/.test(i.str));
+            
+            if (countObj) {
+                const row = tbody.insertRow();
+
+                // 1. 數量
+                row.insertCell(0).textContent = countObj.str;
+
+                // 2. 完整型號名稱
+                // 區間設定：在數量之後(140) 到 功率之前(450)
+                const modelNameFull = rowItems
+                    .filter(i => i.x > 140 && i.x < 420)
+                    .map(i => i.str)
+                    .join(' ')
+                    .split('(1.000)')[0]
+                    .split('Article')[0]
+                    .trim();
+                
+                row.insertCell(1).textContent = modelNameFull || "未知型號";
+
+                // 3. 功率
+                // 尋找 X 座標大於 500 的最後一個數值
+                const powerObj = rowItems.filter(i => i.x > 500).pop();
+                row.insertCell(2).textContent = powerObj ? powerObj.str + " W" : "-";
+            }
+        });
+    }
+}
+</script>
+</body>
+</html>
