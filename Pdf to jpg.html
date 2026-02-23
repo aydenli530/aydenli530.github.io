@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF 轉 JPG 批次工具</title>
+    <!-- 1. 必須先載入主程式 -->
+    <script src="./js/pdf.js"></script> 
+    <!-- 2. 載入其餘工具 -->
+    <script src="./js/jszip.min.js"></script>
+    <script src="./js/FileSaver.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 30px; background-color: #f9f9f9; }
+        .container { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .drop-zone { border: 2px dashed #007bff; padding: 40px; text-align: center; cursor: pointer; margin-bottom: 20px; }
+        #status { white-space: pre-wrap; font-family: monospace; background: #eee; padding: 10px; height: 150px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>PDF 批次轉 JPG (本地版)</h2>
+    <div class="drop-zone" onclick="document.getElementById('pdf-upload').click()">
+        點擊選擇多個 PDF 檔案
+        <input type="file" id="pdf-upload" accept="application/pdf" multiple style="display:none">
+    </div>
+    <div id="status">等待處理...</div>
+</div>
+
+<script>
+    // 關鍵修正：確保讀取到正確的 pdfjsLib
+    const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
+
+    if (!pdfjsLib) {
+        document.getElementById('status').innerText = "錯誤：無法讀取 pdf.js，請檢查檔案名稱是否正確 (需為 pdf.js)";
+    } else {
+        // 設定 Worker 路徑為你的 pdf.worker.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = './js/pdf.worker.js';
+    }
+
+    const uploadInput = document.getElementById('pdf-upload');
+    const statusDiv = document.getElementById('status');
+
+    uploadInput.addEventListener('change', async (e) => {
+        const files = e.target.files;
+        if (files.length === 0) return;
+
+        const zip = new JSZip();
+        statusDiv.innerText = "開始處理...\n";
+
+        for (let f = 0; f < files.length; f++) {
+            const file = files[f];
+            const fileNameNoExt = file.name.replace(/\.[^/.]+$/, "");
+            const folder = zip.folder(fileNameNoExt);
+            
+            statusDiv.innerText += `正在讀取：${file.name}\n`;
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const pdf = await loadingTask.promise;
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 2.0 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                    // 取得 base64 內容
+                    const base64Data = imageData.split(',')[1];
+
+                    // 檔名順序數字：如 01, 02
+                    const seq = i.toString().padStart(2, '0');
+                    folder.file(`${fileNameNoExt}_${seq}.jpg`, base64Data, { base64: true });
+                }
+                statusDiv.innerText += `✅ ${file.name} 處理完成\n`;
+            } catch (err) {
+                statusDiv.innerText += `❌ ${file.name} 失敗: ${err.message}\n`;
+            }
+        }
+
+        statusDiv.innerText += "正在壓縮並下載...\n";
+        const content = await zip.generateAsync({ type: "blob" });
+        saveAs(content, "PDF_Export.zip");
+        statusDiv.innerText += "✨ 全部完成！";
+    });
+</script>
+
+</body>
+</html>
