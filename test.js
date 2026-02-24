@@ -166,6 +166,7 @@ function parseSearch(raw, isAuto = false) {
         const idx = BIBLE_DATA.books.findIndex(b => b.n.includes(bookPart) || b.s.toLowerCase() === bookPart || b.k.toLowerCase() === bookPart);
         
         if (idx !== -1) {
+            console.log("找到書籍:", BIBLE_DATA.books[idx].n); // 除錯用
             const newChap = parseInt(match[2]);
             const newStart = match[3] ? parseInt(match[3]) : 0;
             const newEnd = match[4] ? parseInt(match[4]) : newStart;
@@ -185,6 +186,9 @@ function parseSearch(raw, isAuto = false) {
             checkAllSelectedVersons();
             if (document.getElementById('previewView').style.display !== 'none') updatePreview();
         }
+        else {
+    console.log("正則匹配失敗或找不到對應書籍");
+            ｝
     }
 }
 
