@@ -137,19 +137,61 @@ function renderSuggestionsUI() {
 async function copyAction(verId, type) {
     const book = BIBLE_DATA.books[state.bIdx];
     try {
+        // 1. 先抓取數據
         const verses = await fetchBibleData(verId, book.s, state.chap, state.vStart, state.vEnd);
         const ref = `${book.n} ${state.chap}${state.vStart === 0 ? '' : ':' + state.vStart + (state.vEnd > state.vStart ? '-' + state.vEnd : '')}`;
+        
+        let textToCopy = "";
         if (type === 'title') {
-            await navigator.clipboard.writeText(`${ref} (${tttt[verId] || verId})`);
+            textToCopy = `${ref} (${tttt[verId] || verId})`;
         } else {
-            // 中文不加空格，英文加空格
             const sep = ["unv", "rcuv", "ncv", "cnv"].includes(verId) ? "" : " ";
             let content = verses.map(v => (verses.length > 1 ? `${v.sec}` : "") + v.text).join(sep);
-            await navigator.clipboard.writeText(`${ref} ${content}`);
+            textToCopy = `${ref} ${content}`;
         }
+
+        // 2. 嘗試複製
+        await smartCopy(textToCopy);
         showToast("已複製");
-    } catch (err) { showToast("錯誤：" + err); }
+    } catch (err) { 
+        console.error(err);
+        showToast("錯誤：" + err); 
+    }
 }
+
+// 輔助函數：解決手機端權限問題
+async function smartCopy(text) {
+    // 優先嘗試現代 API
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return; 
+        } catch (e) {
+            console.warn("Clipboard API 失敗，嘗試備案方法");
+        }
+    }
+
+    // 備案方法：使用 Invisible Textarea (對手機 iOS 最穩定)
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, 99999); // 針對 iOS 強制選取
+
+    try {
+        const successful = document.execCommand('copy');
+        if (!successful) throw new Error('execCommand unsuccessful');
+    } catch (err) {
+        throw new Error("您的瀏覽器拒絕複製權限");
+    } finally {
+        document.body.removeChild(textArea);
+    }
+}
+
 
 async function updatePreview() {
     const previewSelect = document.getElementById('previewVerSelect');
