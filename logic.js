@@ -11,7 +11,18 @@ let searchTimer;
 window.onload = () => {
     const savedTheme = localStorage.getItem('bible-theme') || 'light';
     document.body.setAttribute('data-theme', savedTheme);
-    renderFilter(); renderHintWindow(); renderCopyGrid(); renderDevSpecs(); setupSearch();
+    
+    renderFilter();
+    
+const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+if (!isMobile || window.innerWidth > 768) {
+    renderHintWindow();
+}
+
+    renderCopyGrid();
+    renderDevSpecs();
+    setupSearch();
+
     const pSelect = document.getElementById('previewVerSelect');
     if (pSelect) pSelect.innerHTML = BIBLE_DATA.versions.map(v => `<option value="${v.id}">${v.n}</option>`).join('');
 
@@ -22,6 +33,7 @@ window.onload = () => {
         if (e.altKey && e.key.toLowerCase() === 'd') { e.preventDefault(); toggleTheme(); }
     });
 };
+
 
 // --- 新增/補回的功能：對應 HTML 第 52 行的 onclick 事件 ---
 function copyToClipboard(id) {
@@ -265,11 +277,32 @@ function processFhlData(data) {
 }
 
 function renderHintWindow() {
+    // 1. 檢查是否已存在，避免重複渲染
+    if (document.getElementById('hintWindow')) return;
+
+    // 2. 動態建立容器
+    const hintWindow = document.createElement('div');
+    hintWindow.id = 'hintWindow';
+    hintWindow.className = 'hint-window';
+
+    // 3. 處理資料與生成內容
     const groups = [...new Set(BIBLE_DATA.books.map(b => b.g))];
-    document.getElementById('hintWindow').innerHTML = groups.map(g => `
-        <div class="hint-group"><div class="hint-title">${g}</div><div class="hint-items">${BIBLE_DATA.books.filter(b => b.g === g).map(b => `<span class="hint-item" onclick="quickFill('${b.s}')">${b.s}</span>`).join('')}</div></div>
+    hintWindow.innerHTML = groups.map(g => `
+        <div class="hint-group">
+            <div class="hint-title">${g}</div>
+            <div class="hint-items">
+                ${BIBLE_DATA.books
+                    .filter(b => b.g === g)
+                    .map(b => `<span class="hint-item" onclick="quickFill('${b.s}')">${b.s}</span>`)
+                    .join('')}
+            </div>
+        </div>
     `).join('');
+
+    // 4. 將元素加入到 body 中
+    document.body.appendChild(hintWindow);
 }
+
 
 function addHistory(q) {
     if (state.history[0] === q) return;
