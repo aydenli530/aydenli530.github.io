@@ -188,7 +188,7 @@ function parseSearch(raw, isAuto = false) {
         }
         else {
     console.log("正則匹配失敗或找不到對應書籍");
-            ｝
+        }
     }
 }
 
