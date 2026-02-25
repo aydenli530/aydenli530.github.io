@@ -137,63 +137,54 @@ function renderSuggestionsUI() {
 async function copyAction(verId, type) {
     const book = BIBLE_DATA.books[state.bIdx];
     
-    // 【關鍵 1】在所有 await 之前，先產生一個隱形 textarea 並加入 body
-    // 這樣瀏覽器會認為這個元素是跟隨點擊事件產生的
-    const textArea = document.createElement("textarea");
-    textArea.style.position = "fixed";
-    textArea.style.left = "-9999px";
-    textArea.style.top = "0";
-    textArea.setAttribute('readonly', ''); // 防止手機彈出鍵盤
-    document.body.appendChild(textArea);
+    // 檢查是否支援現代 Clipboard API (Safari 13.1+)
+    if (navigator.clipboard && window.ClipboardItem) {
+        // 【關鍵】立刻創建一個包含 Promise 的 ClipboardItem
+        // 這會告訴 Safari：雖然數據還在抓，但這是用戶點擊觸發的合法行為
+        const clipboardPromise = (async () => {
+            const verses = await fetchBibleData(verId, book.s, state.chap, state.vStart, state.vEnd);
+            const ref = `${book.n} ${state.chap}${state.vStart === 0 ? '' : ':' + state.vStart + (state.vEnd > state.vStart ? '-' + state.vEnd : '')}`;
+            
+            let text = "";
+            if (type === 'title') {
+                text = `${ref} (${tttt[verId] || verId})`;
+            } else {
+                const sep = ["unv", "rcuv", "ncv", "cnv"].includes(verId) ? "" : " ";
+                const content = verses.map(v => (verses.length > 1 ? `${v.sec}` : "") + v.text).join(sep);
+                text = `${ref} ${content}`;
+            }
+            return new Blob([text], { type: "text/plain" });
+        })();
 
+        try {
+            const item = new ClipboardItem({ "text/plain": clipboardPromise });
+            await navigator.clipboard.write([item]);
+            showToast("已複製");
+            return; // 成功後直接結束
+        } catch (err) {
+            console.error("ClipboardItem 失敗，切換備案", err);
+        }
+    }
+
+    // --- 備案方法 (針對極端情況或舊版 WebView) ---
+    // 如果上面的現代方法失敗，執行「同步」複製邏輯（這可能需要用戶點第二次，或者預先抓好數據）
     try {
-        // 抓取數據
         const verses = await fetchBibleData(verId, book.s, state.chap, state.vStart, state.vEnd);
         const ref = `${book.n} ${state.chap}${state.vStart === 0 ? '' : ':' + state.vStart + (state.vEnd > state.vStart ? '-' + state.vEnd : '')}`;
+        const textToCopy = type === 'title' ? `${ref} (${tttt[verId] || verId})` : `${ref} ` + verses.map(v => (verses.length > 1 ? `${v.sec}` : "") + v.text).join("");
         
-        let textToCopy = "";
-        if (type === 'title') {
-            textToCopy = `${ref} (${tttt[verId] || verId})`;
-        } else {
-            const sep = ["unv", "rcuv", "ncv", "cnv"].includes(verId) ? "" : " ";
-            let content = verses.map(v => (verses.length > 1 ? `${v.sec}` : "") + v.text).join(sep);
-            textToCopy = `${ref} ${content}`;
-        }
-
-        // 【關鍵 2】將文字塞入預留好的 textArea 並執行複製
+        const textArea = document.createElement("textarea");
         textArea.value = textToCopy;
-        
-        // 針對 iOS 的選取邏輯
-        if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
-            const range = document.createRange();
-            range.selectNodeContents(textArea);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            textArea.setSelectionRange(0, 999999);
-        } else {
-            textArea.select();
-        }
-
-        // 執行複製命令
-        const success = document.execCommand('copy');
-        
-        if (success) {
-            showToast("已複製");
-        } else {
-            // 如果 execCommand 失敗，嘗試最後的 Clipboard API
-            await navigator.clipboard.writeText(textToCopy);
-            showToast("已複製");
-        }
-
-    } catch (err) { 
-        console.error(err);
-        showToast("錯誤：" + err); 
-    } finally {
-        // 最後移除元素
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
         document.body.removeChild(textArea);
+        showToast("已複製 (備案)");
+    } catch (err) {
+        showToast("複製失敗，請長按文字手動複製");
     }
 }
+
 
 
 // 輔助函數：解決手機端權限問題
