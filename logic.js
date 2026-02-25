@@ -136,8 +136,18 @@ function renderSuggestionsUI() {
 
 async function copyAction(verId, type) {
     const book = BIBLE_DATA.books[state.bIdx];
+    
+    // 【關鍵 1】在所有 await 之前，先產生一個隱形 textarea 並加入 body
+    // 這樣瀏覽器會認為這個元素是跟隨點擊事件產生的
+    const textArea = document.createElement("textarea");
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    textArea.setAttribute('readonly', ''); // 防止手機彈出鍵盤
+    document.body.appendChild(textArea);
+
     try {
-        // 1. 先抓取數據
+        // 抓取數據
         const verses = await fetchBibleData(verId, book.s, state.chap, state.vStart, state.vEnd);
         const ref = `${book.n} ${state.chap}${state.vStart === 0 ? '' : ':' + state.vStart + (state.vEnd > state.vStart ? '-' + state.vEnd : '')}`;
         
@@ -150,14 +160,41 @@ async function copyAction(verId, type) {
             textToCopy = `${ref} ${content}`;
         }
 
-        // 2. 嘗試複製
-        await smartCopy(textToCopy);
-        showToast("已複製");
+        // 【關鍵 2】將文字塞入預留好的 textArea 並執行複製
+        textArea.value = textToCopy;
+        
+        // 針對 iOS 的選取邏輯
+        if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
+            const range = document.createRange();
+            range.selectNodeContents(textArea);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            textArea.setSelectionRange(0, 999999);
+        } else {
+            textArea.select();
+        }
+
+        // 執行複製命令
+        const success = document.execCommand('copy');
+        
+        if (success) {
+            showToast("已複製");
+        } else {
+            // 如果 execCommand 失敗，嘗試最後的 Clipboard API
+            await navigator.clipboard.writeText(textToCopy);
+            showToast("已複製");
+        }
+
     } catch (err) { 
         console.error(err);
         showToast("錯誤：" + err); 
+    } finally {
+        // 最後移除元素
+        document.body.removeChild(textArea);
     }
 }
+
 
 // 輔助函數：解決手機端權限問題
 async function smartCopy(text) {
