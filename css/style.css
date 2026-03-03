@@ -1,0 +1,339 @@
+/* --- 基礎變數與重置 --- */
+:root {
+    --primary: #2c3e50; --accent: #3498db; --bg: #f0f2f5;
+    --panel: #ffffff; --text: #333; --border: #dcdde1; --card-bg: #fff;
+    --tag-bg: #e0e0e0; --tag-text: #333;
+    --error: #e74c3c; --success: #27ae60;
+}
+
+[data-theme="dark"] {
+    --bg: #121212; --panel: #1e1e1e; --text: #eee; --border: #333; --card-bg: #252525;
+    --tag-bg: #333; --tag-text: #eee;
+}
+
+body { 
+    font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; 
+    background: var(--bg); color: var(--text); 
+    margin: 0; display: flex; flex-direction: column; 
+    height: 100vh; overflow: hidden; 
+    transition: background 0.3s, color 0.3s;
+}
+
+/* --- 頂部搜尋列 --- */
+.header-zone { background: var(--panel); border-bottom: 2px solid var(--accent); padding: 15px 20px; z-index: 3000; position: relative; }
+.search-wrapper { position: relative; max-width: 950px; margin: 0 auto; display: flex; flex-direction: column; }
+.search-row { display: flex; gap: 10px; align-items: center; position: relative; padding-bottom: 10px; }
+.search-bar { flex-grow: 1; padding: 12px 18px; border-radius: 8px; border: 2px solid var(--border); font-size: 18px; outline: none; background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box; transition: border-color 0.2s; }
+.search-bar:focus { border-color: var(--accent); }
+
+/* --- 穩定懸浮提示窗 --- */
+.hint-window { 
+    position: absolute; top: 55px; left: 0; width: 100%; background: var(--panel); 
+    border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    padding: 15px; display: none; grid-template-columns: repeat(5, 1fr); gap: 10px; 
+    max-height: 500px; overflow-y: auto; z-index: 4000;
+}
+.search-row:hover .hint-window, .hint-window:hover { display: grid; }
+
+
+
+/* --- 搜尋建議清單 --- */
+.suggestions-box { 
+    position: absolute; top: 55px; left: 0; width: 100%; background: var(--panel); 
+    border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+    display: none; z-index: 5000; overflow: hidden;
+}
+.sug-item { padding: 12px 20px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 16px; color: var(--text); }
+.sug-item:last-child { border-bottom: none; }
+.sug-item:hover { background: var(--accent); color: white; }
+
+/* --- 歷史標籤 --- */
+.history-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; min-height: 24px; }
+.history-tag { background: var(--tag-bg); padding: 4px 12px; border-radius: 15px; font-size: 11px; cursor: pointer; color: var(--tag-text); transition: 0.2s; border: 1px solid var(--border); }
+.history-tag:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* --- 分頁標籤 --- */
+.mode-tabs { display: flex; gap: 5px; background: #e9ecef; padding: 8px 20px 0; border-bottom: 1px solid var(--border); justify-content: center; }
+[data-theme="dark"] .mode-tabs { background: #1a1a1a; }
+.m-tab { padding: 10px 25px; cursor: pointer; border-radius: 8px 8px 0 0; background: #ced4da; border: none; font-weight: bold; font-size: 14px; color: #666; transition: 0.2s; }
+[data-theme="dark"] .m-tab { background: #333; color: #aaa; }
+.m-tab.active { background: var(--panel); color: var(--accent); border-bottom: 2px solid var(--panel); margin-bottom: -1px; }
+
+.main-container { flex-grow: 1; overflow-y: auto; padding: 20px; }
+
+/* --- 譯本篩選區 --- */
+.ver-filter-box { max-width: 1100px; margin: 0 auto 20px; background: var(--panel); padding: 12px 20px; border-radius: 10px; border: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
+.filter-label { font-size: 14px; font-weight: bold; color: var(--accent); }
+.check-item { display: flex; align-items: center; gap: 5px; font-size: 14px; cursor: pointer; color: var(--text); }
+
+/* --- 譯本卡片 Grid (含異常標示) --- */
+.copy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; max-width: 1100px; margin: 0 auto; }
+
+.ver-card { 
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; 
+    padding: 18px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+    transition: 0.3s; position: relative; overflow: hidden;
+}
+.ver-card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+
+/* 狀態圓點 */
+.ver-info { display: flex; align-items: center; justify-content: center; margin-bottom: 12px; gap: 8px; }
+.status-dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; display: inline-block; }
+
+.ver-name { font-size: 18px; font-weight: bold; color: var(--accent); }
+
+.quick-copy-btn { width: 100%; background: var(--accent); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 8px; transition: 0.2s; }
+.quick-copy-btn:hover { opacity: 0.9; transform: scale(1.02); }
+.copy-title-btn { width: 100%; background: none; border: 1px solid var(--accent); color: var(--accent); padding: 6px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.2s; }
+.copy-title-btn:hover { background: var(--accent); color: white; }
+
+/* 異常標示 (Error State) */
+.error-msg {
+    display: none;
+    color: #ff4d4f;
+    font-size: 12px;
+    margin-top: 5px;
+    text-align: center;
+}
+/* 當卡片有 is-error 時的樣式 */
+.ver-card.is-error {
+    border: 2px solid #ff4d4f !important; /* 強制紅框 */
+    background-color: #fff2f0; /* 淡紅背景 */
+}
+
+.ver-card.is-error .error-msg {
+    display: block; /* 顯示文字 */
+}
+.ver-card.has-error { border-color: var(--error); background-color: rgba(231, 76, 60, 0.05); }
+.ver-card.has-error .status-dot { background: var(--error); box-shadow: 0 0 8px var(--error); animation: pulse-red 2s infinite; }
+.ver-card.has-error .error-msg { display: block; }
+.ver-card.has-error .ver-name { color: var(--error); }
+
+@keyframes pulse-red {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+/* --- 預覽與技術說明 --- */
+.preview-pane, .spec-pane { max-width: 850px; margin: 0 auto; display: none; background: var(--panel); padding: 30px; border-radius: 15px; border: 1px solid var(--border); color: var(--text); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+.preview-list {
+  display: grid;
+  grid-template-columns: var(--vnumw, 3ch) 1fr;
+  row-gap: 6px;
+  column-gap: 12px;
+  align-items: start;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-feature-settings: "tnum";
+          font-feature-settings: "tnum";
+}
+.preview-list .vnum { text-align: right; color: var(--accent); font-weight: 700; font-size: 0.95em; }
+.preview-list .vtext { white-space: pre-wrap; word-break: break-word; }
+.verse-line { margin-bottom: 15px; font-size: 20px; line-height: 1.8; border-bottom: 1px solid var(--border); padding-bottom: 10px; transition: color 0.2s; }
+.verse-line:hover { color: var(--accent); }
+.verse-line:last-child { border-bottom: none; }
+
+.spec-box { background: #f8f9fa; border: 1px solid #ddd; padding: 15px; border-radius: 8px; font-family: 'Cascadia Code', Consolas, monospace; white-space: pre-wrap; font-size: 13px; color: #333; margin-bottom: 20px; line-height: 1.6; }
+[data-theme="dark"] .spec-box { background: #121212; color: #ccc; border-color: #444; }
+
+/* --- Toast 提示 --- */
+#toast { 
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); 
+    background: rgba(0,0,0,0.85); color: white; padding: 12px 35px; 
+    border-radius: 50px; display: none; z-index: 9999; 
+    transition: opacity 0.3s ease; opacity: 0;
+    backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    font-size: 14px; pointer-events: none;
+}
+
+#hintWindow {
+    position: absolute;
+    z-index: 1000;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+ 
+    /* 關鍵修改 1：移除所有捲軸 */
+    overflow: hidden; 
+    
+    /* 關鍵修改 2：寬度與排版 */
+    width: 100%;
+    max-width: 890px; 
+    box-sizing: border-box;
+    padding: 20px;
+    text-align: left;
+    
+    /* 關鍵修改 3：改為 normal 確保內容在容器內自然流動 */
+    white-space: normal; 
+}
+
+.hint-group { 
+    display: inline-block;
+    vertical-align: top;
+    /* 寬度稍微縮減，確保兩欄加上間距不超過 100% 以防折行 */
+    width: 48%;           
+    font-size: 11px; 
+    margin-bottom: 5px; 
+}
+
+.hint-group:first-child {
+    margin-right: 2%;
+}
+
+.hint-items { 
+    display: grid; 
+    /* 保持你要求的 10 欄與 40px 寬度 */
+    grid-template-columns: repeat(8, 50px); 
+    gap: 4px; 
+}
+
+.hint-item { 
+    /* 保持按鈕規格不變 */
+    width: 40px;
+    height: 30px;
+    display: flex;
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer; 
+    border-radius: 4px; 
+    border: 1px solid var(--border); 
+    font-size: 12px;
+    background: var(--bg); 
+    color: var(--text); 
+    transition: 0.2s; 
+}
+
+.hint-item:hover { 
+    background: var(--accent); 
+    color: white; 
+    border-color: var(--accent); 
+}
+.hint-title { 
+    font-weight: bold; 
+    color: var(--accent); 
+    border-bottom: 1px solid var(--border); 
+    margin-bottom: 12px; 
+    padding-bottom: 4px; 
+}
+
+/* 段落首尾引號（可加點留白） */
+.preview-paragraph .quote-open  { margin-right: 4px; }
+.preview-paragraph .quote-close { margin-left: 4px; }
+.preview-paragraph {
+  font-family: "DFKai-SB", "BiauKai", "KaiTi", "STKaiti", serif;
+  font-size: 16px;
+  line-height: 2.0;
+  letter-spacing: 0.5px;
+  word-break: break-all;
+  white-space: normal;
+  text-align: justify;
+  max-width: 760px;           /* 單欄寬度可微調 */
+}
+.preview-paragraph sup.vnum { font-size: .75em; vertical-align: super; margin-right: 2px; }
+.preview-paragraph .preview-paragraph-title { margin-left: 6px; font-weight: 600; }
+
+/**************************************************************
+ * Preview Format Select  +  Preview One‑Click Copy Button
+ * (Matches your current light-gray bordered minimal UI style)
+ **************************************************************/
+
+/* 共同外觀：白底、黑字、細邊框、圓角、輕陰影 */
+#previewFormatSelect,
+#previewCopyBtn {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  color: #000;
+
+  background: #fff;
+  border: 1px solid #333;
+  border-radius: 6px;
+
+  padding: 6px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+/* ========================
+   下拉式選單專用樣式
+   ======================== */
+#previewFormatSelect {
+  appearance: none;          /* 移除預設系統樣式 */
+  padding-right: 26px;       /* 預留給箭頭空間 */
+  position: relative;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+/* 滑過效果：輕微反白 */
+#previewFormatSelect:hover,
+#previewCopyBtn:hover {
+  background: #f3f3f3;
+}
+
+/* 點按效果：微壓下 */
+#previewFormatSelect:active,
+#previewCopyBtn:active {
+  transform: translateY(1px);
+}
+
+/* ========================
+   一鍵複製按鈕專用樣式
+   ======================== */
+#previewCopyBtn {
+  font-weight: 500;
+  background: #f8f8f8;               /* 比純白更貼近你圖中的灰底 */
+  border: 1px solid #555;
+}
+
+#previewCopyBtn:hover {
+  background: #ececec;
+}
+
+#previewCopyBtn:active {
+  background: #e4e4e4;
+}
+
+/* disabled */
+#previewCopyBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ========================
+   深色模式（若 body[data-theme="dark"]）
+   ======================== */
+body[data-theme="dark"] #previewFormatSelect,
+body[data-theme="dark"] #previewCopyBtn {
+  background: #1c1c1c;
+  color: #e6e6e6;
+  border-color: #666;
+}
+
+body[data-theme="dark"] #previewFormatSelect:hover,
+body[data-theme="dark"] #previewCopyBtn:hover {
+  background: #2a2a2a;
+}
+
+body[data-theme="dark"] #previewFormatSelect:active,
+body[data-theme="dark"] #previewCopyBtn:active {
+  background: #333;
+}
+
+/* ========================
+   響應式
+   ======================== */
+@media (max-width: 480px) {
+  #previewFormatSelect,
+  #previewCopyBtn {
+    width: 100%;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+}
