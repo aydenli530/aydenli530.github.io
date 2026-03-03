@@ -199,6 +199,10 @@ function updateSelectedVers(){ const before=new Set(state.selectedVers); const c
 
 function renderCopyGrid(){ const grid=document.getElementById('copyGrid'); if(!grid) return; const book=BIBLE_DATA.books[state.bIdx]; const currentParams=`${book.s}-${state.chap}-${state.vStart}-${state.vEnd}`; const activeVers=BIBLE_DATA.versions.filter(v=>state.selectedVers.includes(v.id)); grid.innerHTML=activeVers.map(v=>{ const statusKey=`${v.id}-${currentParams}`; const isFailed=fetchStatus[statusKey]==='failed'; const hasCache=!!getCachedVerses(v.id,book.s,state.chap,state.vStart,state.vEnd); return `<div class=\"ver-card ${isFailed?'is-error':''}\" id=\"card-${v.id}\" data-ready=\"${hasCache?'1':'0'}\"><div class=\"ver-info\"><span class=\"ver-name\">${v.n}</span><span class=\"status-dot\"></span></div><div class=\"card-btns\"><button class=\"quick-copy-btn\" onclick=\"copyAction('${v.id}','full')\">⚡ 複製經文</button><button class=\"copy-title-btn\" onclick=\"copyAction('${v.id}','title')\">📋 僅標題</button></div><div class=\"error-msg\" style=\"${isFailed?'display: block;':'display: none;'}\">⚠️ 抓取失敗</div></div>`; }).join(''); }
 
+// 你的 Worker 根端點
+const WORKER_ENDPOINT = "https://bible.q8g9tnm8r7.workers.dev";
+
+// 直接改寫 fetchBibleData（保留你原本的 refKey、processFhlData 等）
 async function fetchBibleData(verId, bookName, chap, vStart, vEnd, refKey = null) {
   const card = document.getElementById(`card-${verId}`);
   if (card) resetCardStatus(verId);
@@ -207,16 +211,50 @@ async function fetchBibleData(verId, bookName, chap, vStart, vEnd, refKey = null
     return Promise.reject('過期請求（已有新查詢）');
   }
 
-  // 組 FHL 目標 URL（沿用你既有參數邏輯）
-  let secParam = (vStart === 0) ? "" : ((vStart === vEnd) ? `&sec=${vStart}` : `&sec=${vStart}-${vEnd}`);
+  // 組你既有的參數（但不再拼 FHL URL）
   const gb = document.getElementById('checkboxSimplifiedChinese')?.checked ? 1 : 0;
-  const fhlUrl = `https://bible.fhl.net/json/qb.php?chineses=${encodeURIComponent(bookName)}&chap=${chap}${secParam}&version=${verId}&gb=${gb}&strong=0`;
+  const sec = (vStart === 0) ? "" : ((vStart === vEnd) ? String(vStart) : `${vStart}-${vEnd}`);
+
+  const payload = {
+    version: verId,
+    chineses: bookName, // 直接傳中文書名，Worker 會 encode
+    chap: chap,
+    sec: sec,           // "" | "1" | "1-5"
+    gb: gb,
+    strong: 0
+  };
 
   try {
-    const parsed = await fetchWithSmartCORS(fhlUrl, { timeoutMs: 10000 });
+    // 用 POST 避免參數曝露在網址
+    const res = await fetch(`${WORKER_ENDPOINT}/qb`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
 
+    if (!res.ok) {
+      if (card) markCardError(verId);
+      if (res.status === 403) throw new Error("Host Not Allowed");
+      if (res.status === 405) throw new Error("Method Not Allowed");
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const rawText = (await res.text()).trim();
     if (refKey && refKey !== currentRefKey) {
       return Promise.reject('過期結果（已有新查詢）');
+    }
+
+    if (rawText.startsWith('Fail:')) {
+      if (card) markCardError(verId);
+      throw new Error('譯本資料庫 SQL 異常');
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText.replace(/[\u3000\u000A\u000D]+/g, ' '));
+    } catch {
+      if (card) markCardError(verId);
+      throw new Error('JSON 格式錯誤');
     }
 
     if (!parsed.record || parsed.record.length === 0) {
@@ -225,12 +263,13 @@ async function fetchBibleData(verId, bookName, chap, vStart, vEnd, refKey = null
     }
 
     return processFhlData(parsed);
+
   } catch (err) {
     if (card) markCardError(verId);
     if (err.name === 'AbortError') {
       throw new Error('網路逾時');
     }
-    throw err;
+    throw err; // 交給上層既有的 UI/Toast 處理
   }
 }
 
