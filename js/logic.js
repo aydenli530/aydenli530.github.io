@@ -17,7 +17,7 @@ const buildCacheKey=(verId,bookS,chap,vStart,vEnd)=>`${verId}|${bookS}|${chap}|$
 const getCachedVerses=(verId,bookS,chap,vStart,vEnd)=>bibleCache.get(buildCacheKey(verId,bookS,chap,vStart,vEnd))||null;
 const setCachedVerses=(verId,bookS,chap,vStart,vEnd,verses)=>bibleCache.set(buildCacheKey(verId,bookS,chap,vStart,vEnd),verses);
 // 你的 Cloudflare Worker 端點（根路徑即可；使用 ?url= 轉發）
-const WORKER_ENDPOINT = "https://bible.q8g9tnm8r7.workers.dev";
+const WORKER_ENDPOINT = "https://bible.q8g9tnm8r7.workers.dev/";
 
 /**
  * 智慧 CORS 回退：
@@ -198,9 +198,6 @@ function updateSelectedVers(){ const before=new Set(state.selectedVers); const c
 }
 
 function renderCopyGrid(){ const grid=document.getElementById('copyGrid'); if(!grid) return; const book=BIBLE_DATA.books[state.bIdx]; const currentParams=`${book.s}-${state.chap}-${state.vStart}-${state.vEnd}`; const activeVers=BIBLE_DATA.versions.filter(v=>state.selectedVers.includes(v.id)); grid.innerHTML=activeVers.map(v=>{ const statusKey=`${v.id}-${currentParams}`; const isFailed=fetchStatus[statusKey]==='failed'; const hasCache=!!getCachedVerses(v.id,book.s,state.chap,state.vStart,state.vEnd); return `<div class=\"ver-card ${isFailed?'is-error':''}\" id=\"card-${v.id}\" data-ready=\"${hasCache?'1':'0'}\"><div class=\"ver-info\"><span class=\"ver-name\">${v.n}</span><span class=\"status-dot\"></span></div><div class=\"card-btns\"><button class=\"quick-copy-btn\" onclick=\"copyAction('${v.id}','full')\">⚡ 複製經文</button><button class=\"copy-title-btn\" onclick=\"copyAction('${v.id}','title')\">📋 僅標題</button></div><div class=\"error-msg\" style=\"${isFailed?'display: block;':'display: none;'}\">⚠️ 抓取失敗</div></div>`; }).join(''); }
-
-// 你的 Worker 根端點
-const WORKER_ENDPOINT = "https://bible.q8g9tnm8r7.workers.dev";
 
 // 直接改寫 fetchBibleData（保留你原本的 refKey、processFhlData 等）
 async function fetchBibleData(verId, bookName, chap, vStart, vEnd, refKey = null) {
