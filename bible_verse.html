@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>各版本網上聖經捷徑</title>
+    <link rel="stylesheet" href="./css/style.css">
+
+    <header class="header-zone">
+        <div class="search-wrapper">
+            <div class="search-row">
+                <input type="text" id="bibleSearch" class="search-bar" placeholder="[Alt+S] 搜尋，如：1Pet 1:1" autocomplete="off">
+                <button onclick="toggleTheme()" style="background:none; border:none; cursor:pointer; font-size:24px;">🌓</button>
+                <div id="hintWindow" class="hint-window"></div>
+                <div id="suggestions" class="suggestions-box"></div>
+            </div>
+
+            <!-- ✅ 新增：搜尋選項（簡體 / 神名） -->
+            <div class="search-options" aria-label="顯示選項" style="display:flex; gap:16px; align-items:center; margin-top:8px;">
+              <label class="opt-item" title="切換為簡體後將重新抓取目前段落">
+                <input type="checkbox" id="checkboxSimplifiedChinese">
+                簡體
+              </label>
+
+              <label class="opt-item" title="僅在畫面與複製輸出中將「上帝」顯示為「神」，不重新抓取">
+                <input type="checkbox" id="checkboxGodName">
+                上帝->「神」
+              </label>
+            </div>
+            <!-- ⬆ 新增結束 -->
+
+            <div id="historyTags" class="history-tags"></div>
+        </div>
+    </header>
+
+    <nav class="mode-tabs">
+        <button id="tab-copy" class="m-tab active" onclick="switchMode('copy')">⚡ 快速複製</button>
+        <button id="tab-preview" class="m-tab" onclick="switchMode('preview')">👁️ 經文預覽</button>
+    </nav>
+
+    <main class="main-container">
+        <!-- 快速複製介面 -->
+        <div id="copyView">
+            <div class="ver-filter-box" id="verFilter">
+                <span class="filter-label">選擇展示譯本：</span>
+                <!-- 由 JS 動態生成 Checkbox -->
+            </div>
+            <div id="copyGrid" class="copy-grid"></div>
+        </div>
+
+        <!-- 預覽介面 -->
+        <div id="previewView" class="preview-pane">
+            <div style="display:flex; justify-content: space-between; margin-bottom:20px; align-items:center;">
+                <select id="previewVerSelect" onchange="updatePreview()" style="padding:8px; border-radius:6px; border:1px solid var(--border);"></select>
+            
+<!-- 🔽 新增：預覽格式切換 -->
+<select id="previewFormatSelect" style="margin-left:8px;">
+  <option value="list">標準格式</option>
+  <option value="paragraph">講章格式</option>
+</select>
+
+                <span id="previewTitle" style="font-weight:bold; font-size:18px; color:var(--accent);"></span>
+            </div>
+            <div id="previewContent"></div>
+        </div>
+       
+    </main>
+
+    <div id="toast"></div>
+    <script src="./js/bible-data.js"></script>
+    <script src="./js/logic.js"></script>		
+		
+</body>
+</html>
