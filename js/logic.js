@@ -17,7 +17,7 @@ const buildCacheKey=(verId,bookS,chap,vStart,vEnd)=>`${verId}|${bookS}|${chap}|$
 const getCachedVerses=(verId,bookS,chap,vStart,vEnd)=>bibleCache.get(buildCacheKey(verId,bookS,chap,vStart,vEnd))||null;
 const setCachedVerses=(verId,bookS,chap,vStart,vEnd,verses)=>bibleCache.set(buildCacheKey(verId,bookS,chap,vStart,vEnd),verses);
 // 你的 Cloudflare Worker 端點（根路徑即可；使用 ?url= 轉發）
-const WORKER_ENDPOINT = "https://bible.q8g9tnm8r7.workers.dev/";
+const WORKER_ENDPOINT = "https://bible.q8g9tnm8r7.workers.dev";
 
 /**
  * 智慧 CORS 回退：
