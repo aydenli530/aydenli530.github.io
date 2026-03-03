@@ -204,39 +204,57 @@ async function fetchBibleData(verId, bookName, chap, vStart, vEnd, refKey = null
   const card = document.getElementById(`card-${verId}`);
   if (card) resetCardStatus(verId);
 
+  // 若在發動前已過期 → 直接丟棄
   if (refKey && refKey !== currentRefKey) {
     return Promise.reject('過期請求（已有新查詢）');
   }
 
-  // 組你既有的參數（但不再拼 FHL URL）
+  // 組參數（不再暴露 FHL URL）
   const gb = document.getElementById('checkboxSimplifiedChinese')?.checked ? 1 : 0;
   const sec = (vStart === 0) ? "" : ((vStart === vEnd) ? String(vStart) : `${vStart}-${vEnd}`);
 
   const payload = {
     version: verId,
-    chineses: bookName, // 直接傳中文書名，Worker 會 encode
+    chineses: bookName, // 直接傳中文書名，Worker 端會 encode
     chap: chap,
     sec: sec,           // "" | "1" | "1-5"
     gb: gb,
     strong: 0
   };
 
+  // ✅ 安全拼接 /qb（不會產生 //qb）
+  const workerQB = new URL('qb', WORKER_ENDPOINT).toString();
+
+  // ✅ 超時控制（例如 10 秒）
+  const controller = new AbortController();
+  const timeoutMs = 10000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    // 用 POST 避免參數曝露在網址
-    const res = await fetch(`${WORKER_ENDPOINT}/qb`, {
+    const res = await fetch(workerQB, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
+
+    // 發回後再次確認 refKey（防止慢回的舊請求覆蓋）
+    if (refKey && refKey !== currentRefKey) {
+      return Promise.reject('過期結果（已有新查詢）');
+    }
 
     if (!res.ok) {
       if (card) markCardError(verId);
       if (res.status === 403) throw new Error("Host Not Allowed");
       if (res.status === 405) throw new Error("Method Not Allowed");
-      throw new Error(`HTTP ${res.status}`);
+      throw new Error(`HTTP ${res.status}`); // 其他狀態碼統一往上丟
     }
 
     const rawText = (await res.text()).trim();
+
+    // 再次檢查 refKey（解析前後都檢查一次最穩）
     if (refKey && refKey !== currentRefKey) {
       return Promise.reject('過期結果（已有新查詢）');
     }
@@ -262,11 +280,19 @@ async function fetchBibleData(verId, bookName, chap, vStart, vEnd, refKey = null
     return processFhlData(parsed);
 
   } catch (err) {
+    clearTimeout(timeoutId);
     if (card) markCardError(verId);
+
+    // 更清晰的錯誤分類與訊息
     if (err.name === 'AbortError') {
-      throw new Error('網路逾時');
+      throw new Error('網路逾時'); // timeout
     }
-    throw err; // 交給上層既有的 UI/Toast 處理
+    // 有些瀏覽器/情境下 CORS 或網路錯誤會拋 TypeError
+    if (err instanceof TypeError) {
+      // 這裡不直接說 CORS，因為也可能是 DNS/離線；給較中性但可辨識的訊息
+      throw new Error('網路或CORS錯誤（TypeError: Failed to fetch）');
+    }
+    throw err; // 其餘交給上層既有的 UI/Toast 處理
   }
 }
 
