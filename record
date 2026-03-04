@@ -1,0 +1,211 @@
+Cloudflare Worker CORS & Security Playbook
+=========================================
+Generated: 2026-03-04 03:10:08
+
+Author: Ayden Li – Project Notes
+
+---
+
+
+1) CORS 基本觀念（為何直接開 URL 仍可看到）
+------------------------------------------
+• CORS 是瀏覽器端的安全策略，用來限制「跨域 JavaScript」讀取回應；不是伺服器 ACL。
+• 直接在瀏覽器網址列輸入 URL、或用 curl/Postman，不屬於跨域 JS，因此不受 CORS 限制；伺服器會照常回應。
+• JS 跨域請求時，瀏覽器會自動帶 Origin header，伺服器可依白名單回 Access-Control-Allow-Origin。
+
+結論：看到回應 ≠ CORS 失效。CORS 的目的是讓非白名單網站的 JS 無法使用回應內容。
+
+---
+
+2) 為什麼 Origin 幾乎不能在瀏覽器偽造？
+----------------------------------------
+• fetch/XHR 由瀏覽器自動填入 Origin，前端無法自訂。
+• 攻擊者網站發請求時，瀏覽器會帶上攻擊者自身的 Origin，會被白名單擋住。
+• 非瀏覽器（curl、自寫客戶端）可隨意偽造 Origin，因而 CORS 不提供保護。
+
+重點：不要把 Origin 當成身分/授權機制，它只保護瀏覽器跨域腳本。
+
+---
+
+3) 嚴格程度的三種防護模式
+---------------------------
+模式 A：最嚴格（只允許指定網域的瀏覽器 JS）
+• 規則：若沒有 Origin，或不在白名單 → 403
+  if (!rawOrigin || !isAllowedOrigin) return new Response("Forbidden", { status: 403 });
+• 注意把 OPTIONS（預檢）放在這條規則之前先放行。
+• 影響：直接開 URL / curl / Postman 預設會被擋。
+
+模式 B：允許健康檢查（無 Origin 的 GET）
+• 在 403 規則前加一條：對特定健康檢查路徑（例如 /qb-health）放行 GET。
+• 其餘仍用白名單限制。
+
+模式 C：允許後台/自動化（API Key/簽章）
+• 在 403 規則前，若帶有 X-API-Key 且驗證通過（Key 存於 Worker Secret），則放行。
+• 前端不可保存密鑰；只給後台或自動化任務用。
+
+---
+
+4) Worker 關鍵實作要點（穩定版）
+--------------------------------
+(1) 預檢 OPTIONS 先處理並 echo Access-Control-Request-Headers：
+  • 回：Access-Control-Allow-Methods: GET, POST, OPTIONS
+  • 回：Access-Control-Allow-Headers: （原樣 echo）
+  • 回：Access-Control-Max-Age: 86400（上線建議）
+
+(2) 白名單比對前，先「正規化 Origin」：
+  • 去尾斜線、忽略預設埠（80/443）、統一小寫。
+
+(3) 嚴格限制入口（可選）：
+  • if (!rawOrigin || !isAllowedOrigin) → 403（放在 OPTIONS 後）。
+
+(4) 回應處理：避免 500 的關鍵
+  • 不要使用 new Response(upstream.body, upstream) 直接串流/複製上游 headers。
+  • 正確做法：
+    - const text = await upstream.text();
+    - 重新包裝 new Response(text, { status: upstream.status, headers: 自行最小化設定 })
+    - 只在 2xx 且 JSON 時寫入 Edge Cache；快取內容不含 CORS/Vary。
+
+(5) 錯誤回應也要加 CORS：
+  • 404/405/400/403/500/502 全部透過同一個 addCors() 輸出。
+
+(6) Cache 策略建議：
+  • Cache-Control: public, max-age={TTL}, stale-while-revalidate={2*TTL}
+  • 以完整上游 URL 做 cache key；只對 2xx 且 JSON 入庫。
+
+---
+
+5) 參考代碼片段（可直接嵌入）
+-----------------------------
+A) 最小回聲版（排障用）
+--------------------------------
+export default {
+  async fetch(request) {
+    try {
+      const origin = request.headers.get("Origin") || "";
+      const raw = await request.text();
+      return new Response(JSON.stringify({ ok: true, method: request.method, path: new URL(request.url).pathname, origin, length: raw.length, snippet: raw.slice(0, 100) }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Access-Control-Allow-Origin": origin || "",
+          "Vary": "Origin"
+        }
+      });
+    } catch (e) {
+      return new Response(String(e?.stack || e), {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": request.headers.get("Origin") || "",
+          "Vary": "Origin",
+          "Content-Type": "text/plain; charset=utf-8"
+        }
+      });
+    }
+  }
+}
+
+B) 重新包裝上游回應（避免 500）
+-------------------------------------
+// 假設已完成：OPTIONS 放行、Origin 正規化、白名單檢查、參數驗證、cacheKey 準備
+try {
+  const upstream = await fetch(fhl.toString(), {
+    method: "GET",
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "application/json,text/plain;q=0.9,*/*;q=0.8"
+    }
+  });
+
+  const text = await upstream.text();
+  let isJson = false;
+  try { JSON.parse(text); isJson = true; } catch {}
+
+  const resp = new Response(text, {
+    status: upstream.status,
+    headers: {
+      "Content-Type": isJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8",
+      "Cache-Control": `public, max-age=60, stale-while-revalidate=120`
+    }
+  });
+
+  if (upstream.ok && isJson) {
+    const toCache = new Response(text, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } });
+    ctx.waitUntil(caches.default.put(cacheKey, toCache));
+  }
+
+  return addCors(resp, isAllowedOrigin, rawOrigin);
+} catch (e) {
+  return addCors(new Response("Upstream Fetch Error", { status: 502 }), isAllowedOrigin, rawOrigin);
+}
+
+C) 嚴格模式骨架（含 OPTIONS 放行）
+--------------------------------------
+// OPTIONS（預檢）
+if (request.method === "OPTIONS") {
+  const reqHeaders = request.headers.get("Access-Control-Request-Headers") || "";
+  const headers = buildCorsHeaders(isAllowedOrigin, rawOrigin, {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": reqHeaders || "Content-Type",
+    "Access-Control-Max-Age": "86400"
+  });
+  return new Response(null, { headers });
+}
+
+// 嚴格限制入口（只允許白名單且必須帶 Origin）
+if (!rawOrigin || !isAllowedOrigin) {
+  return new Response("Forbidden", { status: 403 });
+}
+
+// 其後才是業務邏輯…
+
+---
+
+6) 測試與排障指令
+-------------------
+A) curl 模擬預檢（OPTIONS）
+  curl -i -X OPTIONS 'https://<worker>/qb'     -H 'Origin: https://aydenli530.github.io'     -H 'Access-Control-Request-Method: POST'     -H 'Access-Control-Request-Headers: content-type'
+
+B) curl 模擬實際請求（POST）
+  curl -i 'https://<worker>/qb'     -H 'Origin: https://aydenli530.github.io'     -H 'Content-Type: application/json'     --data '{"version":"cu89","chineses":"創世記","chap":1,"sec":"1-3","gb":0}'
+
+C) wrangler tail（即時觀察 log）
+  wrangler tail
+
+---
+
+7) 進階保護（依需要增加）
+--------------------------
+• Rate limiting：以 cf-connecting-ip / x-forwarded-for 計數限制頻率。
+• Turnstile（人機驗證）：前端取 token、Worker 端驗證；可有效阻擋機器濫用。
+• API Key/簽章/短期 token：僅供後台/自動化程式使用，密鑰存在 Worker Secret，不放前端。
+• 綁自家網域 Route：把 Worker 綁在 api.<你的網域>，可自訂該路徑的 WAF/防機器人規則，穩定性更高。
+• 安全標頭最小化：僅回必要 header；上線移除除錯用 X-Debug-*。
+
+---
+
+8) 上線檢查清單（Checklist）
+---------------------------
+[ ] OPTIONS 預檢：Allow-Methods / Allow-Headers（echo）/ Max-Age 設為 86400
+[ ] 嚴格入口：(!rawOrigin || !isAllowedOrigin) → 403（放在 OPTIONS 之後）
+[ ] 回應處理：不串流上游、不複製 headers，先讀完再自行包裝
+[ ] 所有錯誤路徑也加 CORS（addCors）
+[ ] Vary: Origin 已設
+[ ] Cache 只針對 2xx 且 JSON 入庫；快取內容不含 CORS/Vary
+[ ] ALLOWED_ORIGINS 僅含正式網域（例如 https://aydenli530.github.io）
+[ ] （可選）Rate limiting / Turnstile / API Key 後門 / 綁自家網域 Route
+
+---
+
+9) 備忘：前端注意事項
+---------------------
+• WORKER_ENDPOINT 必須是基底（不含 /qb）：
+  const WORKER_ENDPOINT = 'https://<your-worker-domain>';
+  const workerQB = new URL('qb', WORKER_ENDPOINT).toString();
+• 超時控制（例如 10s）與 TypeError（網路/CORS）錯誤提示保留。
+• 不要使用 mode: 'no-cors'；會拿到不透明回應，無法讀取。
+
+---
+
+附註：
+• 若要讓 curl 也能使用但不開放大眾，請採「模式 C」：以 X-API-Key（存於 Worker Secret）放行後台流量。
+• 若需要對公網完全禁止直接打開 URL，保持嚴格模式（A），即可。
