@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>PDF 批量解鎖並合併（QPDF WASM）</title>
+
+<style>
+body {
+    font-family: system-ui;
+    max-width: 900px;
+    margin: 40px auto;
+    background: #f0f2f5;
+    padding: 20px;
+}
+.card {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.drop-zone {
+    border: 3px dashed #007bff;
+    padding: 40px;
+    text-align: center;
+    border-radius: 10px;
+    cursor: pointer;
+    background: #e7f3ff;
+}
+.drop-zone:hover {
+    background: #d0e7ff;
+}
+#log {
+    margin-top: 20px;
+    padding: 15px;
+    background: #111;
+    color: #00ff88;
+    font-family: monospace;
+    font-size: 13px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.err { color: #ff6666; }
+</style>
+</head>
+
+<body>
+<div class="card">
+    <h2>PDF 批量解鎖並合併（QPDF WASM）</h2>
+    <p>一次處理多個 PDF：解除複製 / 列印限制 → 合併 → 下載</p>
+
+    <div class="drop-zone" id="dropZone">
+        拖曳多個 PDF 到這裏，或點擊選擇
+        <input type="file" id="fileInput" accept=".pdf" multiple hidden>
+    </div>
+
+    <div id="log">初始化中…</div>
+</div>
+
+<!-- 使用你現有的 qpdf.js -->
+<script src="./js/qpdf.js"></script>
+<script>
+const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+const logBox = document.getElementById("log");
+
+let qpdf = null;
+
+function log(msg, cls = "") {
+    const d = document.createElement("div");
+    d.className = cls;
+    d.textContent = "> " + msg;
+    logBox.appendChild(d);
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+// 初始化 QPDF
+log("初始化 QPDF WASM…");
+
+Module({
+    locateFile: p => p.endsWith(".wasm") ? "./js/qpdf.wasm" : p
+}).then(instance => {
+    qpdf = instance;
+    log("✅ 引擎就緒，可處理多個 PDF");
+}).catch(err => {
+    console.error(err);
+    log("❌ 初始化失敗：" + err.message, "err");
+});
+
+// UI
+dropZone.onclick = () => fileInput.click();
+fileInput.onchange = e => handleFiles(e.target.files);
+
+dropZone.ondragover = e => e.preventDefault();
+dropZone.ondrop = e => {
+    e.preventDefault();
+    handleFiles(e.dataTransfer.files);
+};
+
+// 核心邏輯：解鎖 + 合併
+async function handleFiles(fileList) {
+    if (!qpdf) {
+        log("❌ 引擎尚未就緒", "err");
+        return;
+    }
+
+    const files = Array.from(fileList)
+        .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+
+    log(`開始解鎖 ${files.length} 份 PDF…`);
+
+    const unlockedPaths = [];
+
+    // 1️⃣ 逐個解鎖
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        log(`解鎖：${file.name}`);
+
+        const data = new Uint8Array(await file.arrayBuffer());
+        const inPath = `/in_${i}.pdf`;
+        const outPath = `/u_${i}.pdf`;
+
+        qpdf.FS.writeFile(inPath, data);
+
+        try {
+            qpdf.callMain(["--decrypt", inPath, outPath]);
+
+            // ✅ 用 readFile 驗證（向下相容）
+            qpdf.FS.readFile(outPath);
+            unlockedPaths.push(outPath);
+
+        } catch (e) {
+            log(`❌ 解鎖失敗：${file.name}`, "err");
+            log(`   原因：${e.message}`, "err");
+            return; // 有一份失敗就中止
+        }
+    }
+
+    if (unlockedPaths.length === 0) {
+        log("❌ 沒有任何可合併的 PDF", "err");
+        return;
+    }
+
+
+	// 2️⃣ 一次性合併（✅ 每份 PDF 明確指定頁碼）
+	log("合併所有已解鎖 PDF…");
+
+	const mergeArgs = ["--empty", "--pages"];
+
+	for (const p of unlockedPaths) {
+		mergeArgs.push(p, "1-z"); // ✅ 關鍵：顯式頁碼
+	}
+
+	mergeArgs.push("--", "/combined_unlocked.pdf");
+
+	qpdf.callMain(mergeArgs);
+
+    // 3️⃣ 下載結果
+    const out = qpdf.FS.readFile("/combined_unlocked.pdf");
+    const blob = new Blob([out], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "combined_unlocked.pdf";
+    a.click();
+
+    URL.revokeObjectURL(url);
+    log("✅ 完成：combined_unlocked.pdf");
+}
+</script>
+</body>
+</html>
